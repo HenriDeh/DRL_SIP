@@ -1,5 +1,3 @@
-include("SDP.jl")
-using .SDP, .MultiEchelonModels
 
 #creates a problem instance compatible with the SDP.jl module
 function Instance(envi::MultiEchelon)
@@ -10,7 +8,7 @@ function Instance(envi::MultiEchelon)
     c = envi[1].production
     dem = envi.expected_demand
     CV = envi.CV
-    return SDP.Instance(h, p, K, c, CV, dem)
+    return Scarf.Instance(h, p, K, c, CV, dem)
 end
 
 #Monte Carlo test of a (S,s) policy. Only works on single-level SIP

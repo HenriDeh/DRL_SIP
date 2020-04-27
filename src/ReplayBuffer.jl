@@ -1,5 +1,3 @@
-using CuArrays, Flux, Distributions
-
 struct Transition{T<:Real}
     s::Vector{T}
     a::Vector{T}
@@ -31,7 +29,7 @@ end
 
 function addTransitions!(rb::ReplayBuffer{T}, t::Vector{T}) where T <: Transition
     for i in eachindex(t)
-        @inbounds rb.buffer[rb.current] = t[i]
+        rb.buffer[rb.current] = t[i]
         rb.current += 1
         if rb.current > rb.capacity
             rb.current = 1
@@ -56,5 +54,5 @@ function ksample(rb::ReplayBuffer)
         ns[:,i] = batch[i].ns
         d[i] = batch[i].d
     end
-    return CuArray{Float32,2}.((s,a,r,ns,d))
+    return (s,a,r,ns,d) #|> gpu
 end

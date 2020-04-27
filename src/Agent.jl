@@ -1,23 +1,20 @@
-using Flux, CuArrays
-CuArrays.allowscalar(false)
-struct TD3QN_Agent{A, C}
+struct TD3QN_Agent{A,C}
     actor::A
-    target_actor::A
-    critic1::C
-    target_critic1::C
-    critic2::C
-    target_critic2::C
+    critic::C
+    twin_critic::C
+    tactor::A
+    tcritic::C
+    ttwin_critic::C
 end
-
-TD3QN_Agent(actor, critic) = TD3QN_Agent(actor, actor, critic, critic, critic, critic)
 
 explore(a,e) = a #fallback explore function
 
 function (agent::TD3QN_Agent)(state)
-    s = cu(state)
+    s = state #|> gpu
     a = agent.actor(s)
-    best = agent.critic1(vcat(s, a)) .> agent.critic1(vcat(s, cu(zeros(size(a)))))
-    cpu(a .* best)
+    a0 = zeros(size(a)) #|> gpu
+    best = agent.critic(vcat(s, a)) .> agent.critic(vcat(s, a0))
+    a .* best |> cpu
 end
 
 function transition!(agent::TD3QN_Agent, envi; state = observe(envi))

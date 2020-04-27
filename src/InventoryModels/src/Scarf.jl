@@ -1,4 +1,5 @@
-module SDP
+module Scarf
+
 using Distributions, SpecialFunctions
 export Instance, backward_SDP
 mutable struct Instance{T <: Real}
@@ -126,4 +127,5 @@ function backward_SDP(instance::Instance{T}, stepsize::T = one(T)) where T <: Re
         pwla = newpwla
     end
 end
-end
+
+end #module

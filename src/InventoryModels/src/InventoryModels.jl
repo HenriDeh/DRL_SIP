@@ -1,9 +1,12 @@
-module MultiEchelonModels
+module InventoryModels
+
+include("Scarf.jl")
 
 using SpecialFunctions, Reexport
-import MacroTools.@forward, Flux.relu
-export MultiDist, Inventory, MultiEchelon, observation_size, observe, reset!, action_size, action!, expected_reward, test_reset!, isdone, action_noised, action_squashing_function
+import MacroTools.@forward
+export MultiDist, Inventory, MultiEchelon, observation_size, observe, reset!, action_size, action!, expected_reward, test_reset!, isdone, action_noised, action_squashing_function, test_policy
 @reexport using Distributions
+@reexport using .Scarf
 """
 A custom distributions useful for the initial states. It is simply a wrapper into a single Multivariate Distribution to be used instead of calling rand(<:Distribution, ::Int).
 """
@@ -333,6 +336,8 @@ function expected_reward(envi::MultiEchelon{E}, productionsQ::AbstractArray{<: R
     end
     return -(total_prod_cost + holding_costs_comp + fh + fb)
 end
-action_squashing_function(envi::MultiEchelon) = relu
 
-end
+action_squashing_function(envi::MultiEchelon) = x -> max(zero(x), x)
+
+include("policy_tests.jl")
+end #module

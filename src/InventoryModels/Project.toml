@@ -1,0 +1,10 @@
+name = "InventoryModels"
+uuid = "be94c240-e620-4455-b2c0-7979cca4862a"
+authors = ["Dehaybe <henri.dehaybe@uclouvain.be>"]
+version = "0.1.0"
+
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
