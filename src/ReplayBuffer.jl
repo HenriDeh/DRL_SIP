@@ -14,26 +14,23 @@ mutable struct ReplayBuffer{T<:Transition}
     current::Int
 end
 
-function ReplayBuffer(capacity, sample_size, type)
-    ReplayBuffer(capacity, Vector{type}(undef, capacity), sample_size, 1)
-end
+ReplayBuffer(capacity, sample_size, type) = ReplayBuffer(capacity, Vector{type}(undef, capacity), sample_size, 1)
+
 
 function fillbuffer!(rb::ReplayBuffer, agent, envi)
     T = envi.T
     for i in 1:rb.capacity
-        addTransitions!(rb, [transition!(agent, envi)])
+        addTransition!(rb, transition!(agent, envi))
         isdone(envi) && reset!(envi)
     end
     return nothing
 end
 
-function addTransitions!(rb::ReplayBuffer{T}, t::Vector{T}) where T <: Transition
-    for i in eachindex(t)
-        rb.buffer[rb.current] = t[i]
-        rb.current += 1
-        if rb.current > rb.capacity
-            rb.current = 1
-        end
+function addTransition!(rb::ReplayBuffer{T}, t::T) where T <: Transition
+    rb.buffer[rb.current] = t
+    rb.current += 1
+    if rb.current > rb.capacity
+        rb.current = 1
     end
 end
 
@@ -54,5 +51,5 @@ function ksample(rb::ReplayBuffer)
         ns[:,i] = batch[i].ns
         d[i] = batch[i].d
     end
-    return (s,a,r,ns,d) #|> gpu
+    return (s,a,r,ns,d) |> gpu
 end
