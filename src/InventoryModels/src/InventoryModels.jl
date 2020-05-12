@@ -14,16 +14,6 @@ export fixed_linear_cost, linear_cost, expected_hold_stockout_Normal, expected_h
 A custom distributions useful for the initial states. It is simply a wrapper into a single Multivariate Distribution to be used instead of calling rand(<:Distribution, ::Int).
 """
 
-struct MultiDist{S <: ValueSupport, D <: UnivariateDistribution{S}} <: MultivariateDistribution{S}
-    dist::D
-    n::Int
-end
-
-Base.rand(x::MultiDist) = rand(x.dist, x.n)
-Base.rand(x::MultiDist, n::Int) = rand(x.dist, x.n, n)
-Base.length(x::MultiDist) = x.n
-Distributions.support(m::MultiDist) = support(m.dist)
-
 include("utils.jl")
 
 abstract type BOMElement{T<:Real} end
