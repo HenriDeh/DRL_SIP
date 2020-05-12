@@ -1,30 +1,40 @@
 
-#creates a problem instance compatible with the SDP.jl module
-function Instance(envi::MultiEchelon)
-    @assert length(envi) == 1
-    h = envi[1].holding
-    p = envi.backorder_cost
-    K = envi[1].setup
-    c = envi[1].production
-    dem = envi.expected_demand
-    CV = envi.CV
-    return Scarf.Instance(h, p, K, c, CV, dem)
+#creates a problem instance compatible with the Scarf.jl module
+function Instance(envi::InventoryProblem)
+    envi = deepcopy(envi)
+    @assert length(envi.BOM) == 3
+    @assert action_size(envi) == 1
+    sup = envi.BOM[1]
+    @assert sup isa Supplier
+    product = envi.BOM[2]
+    @assert product isa ProductInventory
+    market = envi.market
+    h = market.hold_stockout_cost.h
+    b = market.hold_stockout_cost.b
+    K  = sup.order_cost.K
+    c = sup.order_cost.c
+    dem = mean.(market.demand_forecasts)
+    CV = std(first(market.demand_forecasts))/mean(first(market.demand_forecasts))
+    return Scarf.Instance(h, b, K, c, CV, dem)
 end
 
 #Monte Carlo test of a (S,s) policy. Only works on single-level SIP
-function test_policy(envi::MultiEchelon{E}, S, s, n = 10000) where E <: Real
-    @assert length(envi) == 1
-    totReward = zero(E)
+function test_Scarf_policy(envi::InventoryProblem, S, s, n = 10000)
+    envi = deepcopy(envi)
+    @assert length(envi.BOM) == 3
+    @assert action_size(envi) == 1
+    @assert envi.BOM[1] isa Supplier
+    @assert envi.BOM[2] isa ProductInventory
+    totReward = zero(eltype(envi))
     test_reset!(envi)
-    for _ in 1:n
-        reward = zero(E)
-        for t in 1:envi.T
-            y = envi[1].position
-            q = zero(E)
-            if y < s[t]
-                q = S[t] - y
-            end
-            reward += action!(envi, [q])
+    for i in 1:n
+        reward = zero(eltype(envi))
+        t = 1
+        while !isdone(envi)
+            y = observe(envi.BOM[2])
+            q = y < s[t] ? S[t] - y : zero(eltype(envi))
+            reward += envi(q)
+            t += 1
         end
         totReward += reward
         test_reset!(envi)

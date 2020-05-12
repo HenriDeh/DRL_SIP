@@ -99,6 +99,7 @@ function backward_SDP(instance::Instance{T}, stepsize::T = one(T)) where T <: Re
     critical_ratio = 1# (instance.backorder_cost-instance.holding_cost)/instance.backorder_cost
     EOQ = sqrt(2*meandemand*instance.setup_cost/(critical_ratio*instance.holding_cost))
     upperbound = 2*EOQ
+    upperbound -= upperbound%stepsize
     H = instance.H
     pwla = Pwla(stepsize)
     for t in H:-1:1

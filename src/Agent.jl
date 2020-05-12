@@ -21,8 +21,7 @@ end
 function transition!(agent::TD3QN_Agent, envi)
     state = observe(envi)
     action = agent.explore(agent(state), envi)
-    reward = expected_reward(envi, action)
-    action!(envi, action)
+    reward = envi(action)
     next_state = observe(envi)
     Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
 end
