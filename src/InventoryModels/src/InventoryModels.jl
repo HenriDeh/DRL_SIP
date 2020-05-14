@@ -65,7 +65,7 @@ end
 
 function (inv::Inventory{T})(q) where T
     @assert q >= 0
-    inv.level += dequeue!(inv.source.orders) - q
+    inv.level += popfirst!(inv.source.orders) - q
     position = max(zero(inv.level), inv.level) + sum(inv.source.orders)
     return inv.holding_cost(position)
 end
@@ -107,7 +107,7 @@ end
 
 function (inv::ProductInventory)(q)
     @assert q >= 0
-    inv.level += dequeue!(inv.source.orders) - q
+    inv.level += popfirst!(inv.source.orders) - q
     order_position = sum(inv.source.orders)
     return inv.holding_cost(order_position)
 end
@@ -117,7 +117,7 @@ end
 mutable struct Supplier{T <: Real, F, R <: Union{T, UnivariateDistribution}, TR <: Union{T, UnivariateDistribution}} <: ActionableElement{T}
     order_cost::F
     lead_time::Int
-    orders::Queue{T}
+    orders::Vector{T}
     reset_orders::Vector{R}
     test_reset_orders::Vector{TR}
 end
@@ -127,41 +127,31 @@ function Supplier(  order_cost,
                     test_reset_orders = reset_orders)
     @assert length(reset_orders) == length(test_reset_orders)
     @assert !isempty(methods(order_cost)) "order_cost must be callable"
-    orders = eltype(reset_orders) <: Distribution ? rand.(reset_orders) : reset_orders
-    T = eltype(orders)
-    order_queue = Queue{T}()
+    order_queue = eltype(reset_orders) <: Distribution ? rand.(reset_orders) : reset_orders
+    T = eltype(order_queue)
     if !(eltype(reset_orders) <: Distribution)
         reset_orders = T.(reset_orders)
     end
     if !(eltype(test_reset_orders) <: Distribution)
         test_reset_orders = T.(test_reset_orders)
     end
-    for o in orders enqueue!(order_queue, o) end
     lead_time = length(reset_orders)
     Supplier(order_cost, lead_time, order_queue, reset_orders, test_reset_orders)
 end
 
-observe(sup::Supplier) = collect(sup.orders)
+observe(sup::Supplier) = sup.orders
 observation_size(sup::Supplier) = sup.lead_time
 function reset!(sup::Supplier)
-    orders = max.(zero(eltype(sup.orders)), eltype(sup.reset_orders) <: Distribution ? rand.(sup.reset_orders) : sup.reset_orders)
-    empty!(sup.orders)
-    for o in orders
-        enqueue!(sup.orders, o)
-    end
+    sup.orders = max.(zero(eltype(sup.orders)), eltype(sup.reset_orders) <: Distribution ? rand.(sup.reset_orders) : sup.reset_orders)
     return nothing
 end
 function test_reset!(sup::Supplier)
-    orders = max.(zero(eltype(sup.orders)), eltype(sup.test_reset_orders) <: Distribution ? rand.(sup.test_reset_orders) : sup.test_reset_orders)
-    empty!(sup.orders)
-    for o in orders
-        enqueue!(sup.orders, o)
-    end
+    sup.orders = max.(zero(eltype(sup.orders)), eltype(sup.test_reset_orders) <: Distribution ? rand.(sup.test_reset_orders) : sup.test_reset_orders)
     return nothing
 end
 
 function (sup::Supplier)(q)
-    enqueue!(sup.orders, q)
+    push!(sup.orders, q)
     return sup.order_cost(q)
 end
 
@@ -171,13 +161,13 @@ mutable struct Assembly{T, F, R <: Union{T, UnivariateDistribution}, TR <: Union
     order_cost::F
     components::Vector{Tuple{Int, Inventory{T}}}
     lead_time::Int
-    orders::Queue{T}
+    orders::Vector{T}
     reset_orders::Vector{R}
     test_reset_orders::Vector{TR}
 end
 
 function Assembly(  order_cost,
-                    components::Vector{Tuple{Int, Inventory{T}}},
+                    components,
                     reset_orders;
                     test_reset_orders = reset_orders
                     ) where T <: Real
@@ -185,9 +175,7 @@ function Assembly(  order_cost,
     @assert length(reset_orders) == length(test_reset_orders)
     @assert !isempty(methods(order_cost)) "order_cost must be callable"
     @assert !isempty(components) "Assembly must have at least one component"
-    orders = eltype(reset_orders) <: Distribution ? rand.(reset_orders) : reset_orders
-    order_queue = Queue{T}()
-    for o in orders enqueue!(order_queue, o) end
+    order_queue = eltype(reset_orders) <: Distribution ? rand.(reset_orders) : reset_orders
     lead_time = length(reset_orders)
     Assembly(order_cost, components, lead_time, holding_cost, order_queue, reset_orders, test_reset_orders)
 end
@@ -195,19 +183,11 @@ end
 observe(a::Assembly) = collect(a.orders)
 observation_size(a::Assembly) = a.lead_time
 function reset!(a::Assembly)
-    orders = max.(zero(eltype(a.orders)), eltype(a.reset_orders) <: Distribution ? rand.(a.reset_orders) : a.reset_orders)
-    empty!(a.orders)
-    for o in orders
-        enqueue!(order_queue, o)
-    end
+    p.orders = max.(zero(eltype(a.orders)), eltype(a.reset_orders) <: Distribution ? rand.(a.reset_orders) : a.reset_orders)
     return nothing
 end
 function test_reset!(a::Assembly)
-    orders = max.(zero(eltype(a.orders)), eltype(a.test_reset_orders) <: Distribution ? rand.(a.test_reset_orders) : a.test_reset_orders)
-    empty!(a.orders)
-    for o in orders
-        enqueue!(order_queue, o)
-    end
+    p.orders = max.(zero(eltype(a.orders)), eltype(a.test_reset_orders) <: Distribution ? rand.(a.test_reset_orders) : a.test_reset_orders)
     return nothing
 end
 
@@ -219,7 +199,7 @@ function (a::Assembly{T})(q) where T
     for (n, comp) in a.components
         component_holding_costs += comp(q*n)
     end
-    enqueue!(a.orders, q)
+    push!(a.orders, q)
     return a.order_cost(q) + component_holding_costs
 end
 
@@ -253,9 +233,14 @@ end
 
 function observe(m::Market{T}) where T
     horizon = min(m.t + m.visibility - 1, lastindex(m.demand_forecasts))
-    para = m.t > length(m.demand_forecasts) ? T[] : reduce(vcat, collect.(params.(m.demand_forecasts))[m.t:horizon])
-    excess = zeros(T, observation_size(m) - length(para))
-    return vcat(para, excess)
+    state = zeros(T, observation_size(m))
+    i = 1
+    for dist in @view m.demand_forecasts[m.t:horizon]
+        for p in params(dist)
+            state[i] = p
+        end
+    end
+    return state
 end
 observation_size(m::Market) = m.visibility*length(params(first(m.demand_forecasts)))
 
@@ -288,9 +273,9 @@ end
 
 """InventoryProblem"""
 
-mutable struct InventoryProblem{T <: Real, M <: Market}
-    BOM::Vector{BOMElement{T}}
-    actionables::Vector{ActionableElement{T}}
+mutable struct InventoryProblem{T <: Real, A <: Tuple, B <: Tuple, M <: Market{T}}
+    BOM::B
+    actionables::A
     market::M
 end
 
@@ -305,10 +290,10 @@ function InventoryProblem(BOM::Vector{BOMElement{T}}) where T
         end
     end
     @assert length(markets) == 1 "InventoryProblem must have one and only one market in the BOM"
-    InventoryProblem(BOM, actionables, first(markets))
+    InventoryProblem(tuple(BOM...), tuple(actionables...), first(markets))
 end
 
-function observe(ip::InventoryProblem)
+function observe(ip::InventoryProblem{T}) where T
     reduce(vcat, observe.(ip.BOM))
 end
 

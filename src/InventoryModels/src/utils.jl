@@ -23,7 +23,7 @@ struct linear_holding_backorder{T1,T2}
     h::T1
     b::T2
 end
-(f::linear_holding_backorder)(y, par...) = h*max(zero(y), y) - b*min(zero(y), y)
+(f::linear_holding_backorder)(y, par...) = f.h*max(zero(y), y) - f.b*min(zero(y), y)
 
 
 struct fixed_linear_cost{T1,T2}
@@ -85,4 +85,12 @@ function (f::expected_hold_stockout_CVNormal)(y, μ)
         fb *= b
     end
     return fh + fb
+end
+
+function Base.sum(q::Queue) where T
+    s = zero(eltype(q))
+    for e in q
+        s += e
+    end
+    return s
 end
