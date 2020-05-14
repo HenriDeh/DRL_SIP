@@ -2,33 +2,37 @@
 using DrWatson
 @quickactivate "DRL_SIP"
 using InventoryModels
-using BSON, StatsPlots
+#using BSON, Plots
 include(srcdir("TD3QN.jl"))
 
 const μ = 10.0
 holding = 1
-backorder_cost = 10
+backorder = 10
 CV = 0.4
 setup = 1280
 production = 0
 T = 52
 H = 70
 const EOQ = sqrt(μ * 2 * maximum(setup) / holding)
-Dt = MultiDist(Uniform(0, 2 * μ), H)
-test_μs = rand(Dt)
-on_hand_dist = Uniform(-μ, 2 * μ)
-end_prod = Inventory(holding, setup, production, on_hand_dist, on_hand = 0)
-envi = MultiEchelon(Dt, backorder_cost, CV, [end_prod], simulation_horizon = H, expected_demand = test_μs)
+
+reseter = repeat([(Uniform(0,2μ), Normal(CV,0))], H)
+test_forecasts = CVNormal.([rand(Uniform(0, 2μ)) for _ in 1:H], CV)
+
+sup = Supplier(fixed_linear_cost(setup,production))
+pro = ProductInventory(linear_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
+ma = Market(expected_hold_stockout_CVNormal(holding,backorder, CV), pro, CVNormal, true, reseter, test_reset_forecasts = test_forecasts, expected_reward = true, visibility = T)
+envi = InventoryProblem([sup, pro, ma])
+
 test_reset!(envi)
 instance = Instance(envi)
 Scarf.backward_SDP(instance)
-opt_policy_value = test_policy(envi, instance.S, instance.s)
-dummy_policy_value = test_policy(envi, fill(-Inf, H), fill(-Inf, H))
+opt_policy_value = test_Scarf_policy(envi, instance.S, instance.s)
+dummy_policy_value = test_Scarf_policy(envi, fill(-Inf, H), fill(-Inf, H))
 
 hp = TD3QN_HP(
     replaysize = 30000,
-    batchsize = 128,
-    delay = 2,
+    batchsize = 256,
+    delay = 4,
     optimiser_actor = Flux.Optimiser(ADAM(1f-5), ClipNorm(1)),
     optimiser_critic = Flux.Optimiser(ADAM(1f-3), ClipNorm(1))
 )
@@ -36,20 +40,33 @@ hp = TD3QN_HP(
 const epsilon = 0.05
 const zero_epsilon = 0.5
 
-explore(action, envi::MultiEchelon) = rand() > epsilon ? action : [rand() > zero_epsilon ? rand(Uniform(0, EOQ*2)) : zero(eltype(action)) for _ in eachindex(action)]
+explore(action) = rand() > epsilon ? action : [rand() > zero_epsilon ? rand(Uniform(0, EOQ*2)) : zero(eltype(action)) for _ in eachindex(action)]
 
 width = 64
-for i in 1:30
+
+agents = []
+for i in 1:10
     println(i)
     agent = TD3QN_Agent(
-                Chain(Dense(observation_size(envi), width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, action_size(envi), action_squashing_function(envi))) |> gpu,
-                Chain(Dense((observation_size(envi) + action_size(envi)), width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, 1)) |> gpu,
-                Chain(Dense((observation_size(envi) + action_size(envi)), width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, width, leakyrelu), Dense(width, 1)) |> gpu,
-                explore
+                Chain(  Dense(observation_size(envi), width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, action_size(envi), action_squashing_function(envi))) |> gpu,
+                Chain(  Dense((observation_size(envi) + action_size(envi)), width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, 1)) |> gpu,
+                Chain(  Dense((observation_size(envi) + action_size(envi)), width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, width, leakyrelu),
+                        Dense(width, 1)) |> gpu,
+                explore,
+                target_actor = i < 5
         )
 
-    returns, time = train!(agent, envi, hp, maxit = 300000, test_freq = 3000)
+    returns, time = train!(agent, envi, hp, maxit = 200000, test_freq = 2000)
     println(test_agent(agent, envi, 3000)/opt_policy_value -1)
+    push!(agents, agent)
 end
 #=
 lastrun = runs[2]

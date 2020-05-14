@@ -8,7 +8,7 @@ struct TD3QN_Agent{A,C,F}
     explore::F
 end
 
-TD3QN_Agent(actor, critic, twin_critic, explore = (a,e) -> a) = TD3QN_Agent(actor, critic, twin_critic, deepcopy(actor), deepcopy(critic), deepcopy(twin_critic), explore)
+TD3QN_Agent(actor, critic, twin_critic, explore = identity; target_actor = false) = TD3QN_Agent(actor, critic, twin_critic, target_actor ? deepcopy(actor) : actor, deepcopy(critic), deepcopy(twin_critic), explore)
 
 function (agent::TD3QN_Agent)(state; actor = agent.actor, critic = agent.critic)
     s = state |> gpu
@@ -20,7 +20,7 @@ end
 
 function transition!(agent::TD3QN_Agent, envi)
     state = observe(envi)
-    action = agent.explore(agent(state), envi)
+    action = agent.explore(agent(state))
     reward = envi(action)
     next_state = observe(envi)
     Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
@@ -30,9 +30,11 @@ function test_agent(agent::TD3QN_Agent, envi, n = 1000)
     test_reset!(envi)
     envis = [deepcopy(envi) for _ in 1:n]
     cumreward = 0.0
-    for t in 1:envi.T
-        actions = agent(hcat(observe.(envis)...))
-        cumreward += sum([action!(envis[i], actions[:,i]) for i in 1:n])
+    while !isdone(first(envis))
+        observations = observe.(envis)
+        input = hcat(observations...)
+        actions = agent(input)
+        cumreward += sum([envis[i](actions[:,i]) for i in 1:n])
     end
     return cumreward/n
 end
