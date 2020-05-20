@@ -151,11 +151,13 @@ function test_reset!(sup::Supplier)
 end
 
 function (sup::Supplier)(q)
+    q = max(zero(q), q)
     push!(sup.orders, q)
     return sup.order_cost(q)
 end
 
 """Assembly"""
+#TODO relu the action
 
 mutable struct Assembly{T, F, R <: Union{T, UnivariateDistribution}, TR <: Union{T, UnivariateDistribution}} <: ActionableElement{T}
     order_cost::F
@@ -192,6 +194,7 @@ function test_reset!(a::Assembly)
 end
 
 function (a::Assembly{T})(q) where T
+    q = max(zero(q), q)
     component_holding_costs = zero(T)
     for (n, comp) in a.components
         q = min(q, div(comp.level, n))
