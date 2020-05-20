@@ -2,7 +2,7 @@ using ProgressMeter, LinearAlgebra, Flux, Distributions, CuArrays, Parameters
 CuArrays.allowscalar(false)
 
 include("ReplayBuffer.jl")
-include("utilities.jl")
+include("DRL_utilities.jl")
 
 struct TD3QN_Agent{A,C,F}
     actor::A
