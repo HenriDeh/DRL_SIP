@@ -22,3 +22,24 @@ function Flux.Optimise.apply!(o::ClipNorm, x, Δ)
     end
     return Δ
 end
+
+function transition!(agent, envi)
+    state = observe(envi)
+    action = agent.explore(agent(state))
+    reward = envi(action)
+    next_state = observe(envi)
+    Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
+end
+
+function test_agent(agent, envi, n = 1000)
+    test_reset!(envi)
+    envis = [deepcopy(envi) for _ in 1:n]
+    cumreward = 0.0
+    while !isdone(first(envis))
+        observations = observe.(envis)
+        input = hcat(observations...)
+        actions = agent(input)
+        cumreward += sum([envis[i](actions[:,i]) for i in 1:n])
+    end
+    return cumreward/n
+end

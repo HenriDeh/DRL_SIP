@@ -2,11 +2,31 @@ using ProgressMeter, LinearAlgebra, Flux, Distributions, CuArrays, Parameters
 CuArrays.allowscalar(false)
 
 include("ReplayBuffer.jl")
-include("Agent.jl")
 include("utilities.jl")
 
+struct TD3QN_Agent{A,C,F}
+    actor::A
+    critic::C
+    twin_critic::C
+    tcritic::C
+    ttwin_critic::C
+    explore::F
+end
+
+TD3QN_Agent(actor, critic, twin_critic, explore = identity) = TD3QN_Agent(actor, critic, twin_critic, deepcopy(critic), deepcopy(twin_critic), explore)
+
+function (agent::TD3QN_Agent)(state)
+    actor = agent.actor
+    critic = agent.critic
+    s = state |> gpu
+    a = actor(s)
+    a0 = zeros(size(a)) |> gpu
+    best = critic(vcat(s, a)) .> critic(vcat(s, a0))
+    a .* best |> cpu
+end
+
 function twin_target(reward::T, next_state::T, done::T, agent::TD3QN_Agent) where T <: AbstractArray
-    next_action = agent(next_state, actor = agent.tactor)
+    next_action = agent(next_state)
     Qprime1 = agent.tcritic(vcat(next_state, next_action))
     Qprime2 = agent.ttwin_critic(vcat(next_state, next_action))
     return reward .+ (min.(Qprime1, Qprime2) .* done)
@@ -43,7 +63,7 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::TD3QN_HP; maxit::Int 
         s,a,r,ns,d = ksample(replaybuffer)
         y = twin_target(r,ns,d, agent)
         b = (s,a,y)
-        if it % 2 == 0
+        if it % 1 == 0
             Flux.train!(
                 (d...) -> critic_loss(d..., agent.critic),
                 Flux.params(agent.critic),
@@ -68,7 +88,7 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::TD3QN_HP; maxit::Int 
                 [s],
                 optimiser_actor
             )
-            softsync!(agent.actor, agent.tactor, softsync_rate)
+            #softsync!(agent.actor, agent.tactor, softsync_rate)
         end
         addTransition!(replaybuffer, transition!(agent, envi))
         isdone(envi) && reset!(envi)
