@@ -11,6 +11,8 @@ using InventoryModels
 	@test observe(sup) == Float64[]
 	@test sup(10) == 110
 	@test observe(sup) == [10]
+	test_reset!(sup)
+	@test sup(-10) == 0
 	sup = Supplier(fixed_linear_cost(100,1), fill(Uniform(0,10),2))
 	sup = Supplier(fixed_linear_cost(100,1), fill(Uniform(0,10),2), test_reset_orders=fill(2,2))
 	@test sup.lead_time == 2 == length(sup.orders) == length(sup.reset_orders) == length(sup.test_reset_orders)
@@ -65,6 +67,14 @@ end
 	@test observation_size(ma) == length(observe(ma))
 	reset!(ma)
 	@test observe(ma) == [20,40,60,40]
+	ma.t = 2
+	@test observe(ma) == [40,60,40,0]
+	ma.t = 3
+	@test observe(ma) == [60,40,0,0]
+	ma.t = 4
+	@test observe(ma) == [40,0,0,0]
+	ma.t = 5
+	@test observe(ma) == [0,0,0,0]
 	test_reset!(ma)
 	@test observe(ma) == [20,40,60,40]
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
@@ -147,7 +157,7 @@ end
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(expected_hold_stockout_CVNormal(1,10, cv), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
+	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
 	envi = InventoryProblem([sup, pro, ma])
 	test_reset!(envi)
 	instance = Instance(envi)
@@ -155,4 +165,30 @@ end
 	@test instance.s == [14, 29, 58, 28]
 	@test instance.S == [70, 141, 114, 53]
 	@test -363 < test_Scarf_policy(envi, instance.S, instance.s) < -362
+
+	sup = Supplier(fixed_linear_cost(100,0), zeros(1))
+	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	forecasts = [20,40,60,40]
+	cv = 0.25
+	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
+	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
+	envi = InventoryProblem([sup, pro, ma])
+	test_reset!(envi)
+	instance = Instance(envi)
+	Scarf.backward_SDP(instance)
+	@test instance.s == [49, 102, 90, -Inf]
+	@test instance.S == [172, 159, 124, -Inf]
+
+	sup = Supplier(fixed_linear_cost(100,0))
+	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	forecasts = [20,40,60,40]
+	cv = 0.25
+	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
+	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, false, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
+	envi = InventoryProblem([sup, pro, ma])
+	test_reset!(envi)
+	instance = Instance(envi)
+	Scarf.backward_SDP(instance)
+	@test instance.s == [14, 29, 58, 28]
+	@test instance.S == [70, 141, 114, 53]
 end
