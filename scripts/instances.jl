@@ -1,7 +1,7 @@
 #script used to generate instances.csv
 using Distributions, CSV, DataFrames
 test_forecasts = []
-T = 70
+T = 52
 H = 52
 μ = 10
 """Uncorrelated"""
@@ -13,12 +13,12 @@ end
 """Seasonal"""
 
 ρs = [0.1, 0.3]
-fs = [2, 4]
+fs = [1, 2]
 for ρ in ρs
     for f in fs
         for i in 1:50
             spread = ρ*sqrt(12)*μ/2
-            μt = [(1 + 0.5*sin(f*t*π/H))*max(0, rand(Uniform(μ-spread, μ + spread))) for t in 1:T]
+            μt = [(1 + 0.5*sin(2f*t*π/H))*max(0, rand(Uniform(μ-spread, μ + spread))) for t in 1:T]
             push!(test_forecasts, μt)
         end
     end
