@@ -7,19 +7,36 @@ mutable struct Instance{T <: Real}
     backorder_cost::T
     setup_cost::T
     production_cost::T
-    demand_forecasts::Array{Normal{T},1}
+    lead_time::Int
+    backlog::Bool
+    demand_forecasts::Vector{Normal{T}}
+    lt_demand_forecasts::Vector{Normal{T}}
     H::Int
     s::Array{T,1}
     S::Array{T,1}
 end
 
-function Instance(h,b,K,c,CV,demands)
+function Instance(h,b,K,c,CV,LT,demands, backlog = one(CV))
     T = typeof(CV)
     dists = Normal{T}[]
+    @assert b > c && b > h
     for d in demands
         push!(dists, Normal(d, CV*d))
     end
-    Instance{T}(h,b,K,c,dists,length(dists),Array{T,1}(undef,length(dists)),Array{T,1}(undef,length(dists)))
+    lt_dists = Normal{T}[]
+    for t in 1:(length(dists)-LT)
+        mean_sum = zero(T)
+        mean_var = zero(T)
+        for i in 0:LT
+            mean_sum += mean(dists[t+i])
+            mean_var += var(dists[t+i])
+        end
+        push!(lt_dists, Normal(mean_sum, sqrt(mean_var)))
+    end
+    backlog = min(one(backlog), max(zero(backlog), backlog))
+    S = fill(-Inf, length(dists))
+    s = fill(-Inf, length(dists))
+    Instance{T}(h,b,K,c,LT,backlog, dists,lt_dists,length(dists), S, s)
 end
 
 mutable struct Pwla{T}
@@ -31,6 +48,8 @@ function Pwla(stepsize)
     T = typeof(stepsize)
     Pwla{T}(Array{T,1}(), stepsize:stepsize:stepsize)
 end
+
+Base.push!(p::Pwla, x) = push!(p.breakpoints, x)
 
 function (pwla::Pwla)(y)
     if length(pwla.breakpoints) > 0
@@ -51,8 +70,8 @@ end
 function L(instance::Instance, y, t::Int)
     h = instance.holding_cost
     b = instance.backorder_cost
-    μ = mean(instance.demand_forecasts[t])
-    v = var(instance.demand_forecasts[t])
+    μ = mean(instance.lt_demand_forecasts[t])
+    v = var(instance.lt_demand_forecasts[t])
     e = MathConstants.e
     π = MathConstants.pi
     fh = zero(y)
@@ -81,16 +100,16 @@ function C(instance::Instance, x, t::Int, pwla::Pwla)
 end
 
 function expected_future_cost(instance::Instance, y, t::Int, pwla::Pwla)
-    if t >= instance.H
+    if t >= instance.H-instance.lead_time
         return zero(y)
     else
         df = instance.demand_forecasts[t]
-        ub = quantile(df, 0.99999)
+        ub = instance.backlog ? quantile(df, 0.99999) : y
         ξ = pwla.range.step:pwla.range.step:ub
         x = y .- ξ
-        p = cdf.(df, ξ .+ ξ.step.hi/2) .- cdf.(df, ξ .- ξ.step.hi/2)#::Array{Float64,1}
+        p = cdf.(df, ξ .+ ξ.step.hi/2) .- cdf.(df, ξ .- ξ.step.hi/2)
         c(x) = C(instance, x, t+1, pwla)
-        return sum(c.(x) .* p)
+        return sum(c.(x) .* p) - cdf(df, y)c(zero(y))*(1-instance.backlog)
     end
 end
 
@@ -98,23 +117,23 @@ function backward_SDP(instance::Instance{T}, stepsize::T = one(T)) where T <: Re
     meandemand = max(stepsize, mean(mean.(instance.demand_forecasts)))
     critical_ratio = 1# (instance.backorder_cost-instance.holding_cost)/instance.backorder_cost
     EOQ = sqrt(2*meandemand*instance.setup_cost/(critical_ratio*instance.holding_cost))
-    upperbound = 2*EOQ
-    upperbound -= upperbound%stepsize
+    upperbound = 2*EOQ + stepsize - 2*EOQ%stepsize
     H = instance.H
-    pwla = Pwla(stepsize)
-    for t in H:-1:1
-        newpwla = Pwla(stepsize)
+    λ = instance.lead_time
+    C_tplus1 = Pwla(stepsize)
+    for t in H-λ:-1:1
+        C_t = Pwla(stepsize)
         descending = true
         y = upperbound
-        EFC = expected_future_cost(instance, y, t, pwla)
+        EFC = expected_future_cost(instance, y, t, C_tplus1)
         g = G(instance, y, t) + EFC
-        push!(newpwla.breakpoints, EFC)
+        push!(C_t, EFC)
         instance.S[t] = y
         ming = g
         while g <= ming + instance.setup_cost || descending
             y -= stepsize
-            EFC = expected_future_cost(instance, y, t, pwla)
-            push!(newpwla.breakpoints, EFC)
+            EFC = expected_future_cost(instance, y, t, C_tplus1)
+            push!(C_t, EFC)
             g = G(instance, y, t) + EFC
             if g < ming
                 ming = g
@@ -124,8 +143,8 @@ function backward_SDP(instance::Instance{T}, stepsize::T = one(T)) where T <: Re
             end
         end
         instance.s[t] = y
-        newpwla.range = y:stepsize:upperbound
-        pwla = newpwla
+        C_t.range = y:stepsize:upperbound
+        C_tplus1 = C_t
     end
 end
 

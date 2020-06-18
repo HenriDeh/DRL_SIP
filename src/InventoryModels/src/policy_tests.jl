@@ -13,9 +13,10 @@ function Instance(envi::InventoryProblem)
     b = market.hold_stockout_cost.b
     K  = sup.order_cost.K
     c = sup.order_cost.c
+    LT = sup.lead_time
     dem = mean.(market.demand_forecasts)
     CV = std(first(market.demand_forecasts))/mean(first(market.demand_forecasts))
-    return Scarf.Instance(h, b, K, c, CV, dem)
+    return Scarf.Instance(h, b, K, c, CV, LT, dem, market.backlog)
 end
 
 #Monte Carlo test of a (S,s) policy. Only works on single-level SIP
