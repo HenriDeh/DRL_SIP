@@ -241,6 +241,7 @@ function observe(m::Market{T}) where T
     for dist in @view m.demand_forecasts[m.t:horizon]
         for p in params(dist)
             state[i] = p
+            i += 1
         end
     end
     return state
