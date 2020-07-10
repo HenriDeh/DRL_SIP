@@ -26,7 +26,15 @@ end
 
 function transition!(agent, envi)
     state = observe(envi)
-    action = agent.explore(agent(state) |> cpu)
+    action = agent.explorer(agent(state) |> cpu)
+    reward = envi(action)
+    next_state = observe(envi)
+    Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
+end
+
+function transition_exp!(agent, envi)
+    state = observe(envi)
+    action = agent.explorer.explore(agent(state) |> cpu)
     reward = envi(action)
     next_state = observe(envi)
     Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)

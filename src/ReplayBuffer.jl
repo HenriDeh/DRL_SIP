@@ -18,7 +18,7 @@ ReplayBuffer(capacity, sample_size, type) = ReplayBuffer(capacity, Vector{type}(
 
 function fillbuffer!(rb::ReplayBuffer, agent, envi)
     for i in 1:rb.capacity
-        addTransition!(rb, transition!(agent, envi))
+        addTransition!(rb, transition_exp!(agent, envi))
         isdone(envi) && reset!(envi)
     end
     return nothing
