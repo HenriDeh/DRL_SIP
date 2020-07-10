@@ -1,40 +1,54 @@
 #script used to generate instances.csv
 using Distributions, CSV, DataFrames
-test_forecasts = []
+CSV.write("data/instances.csv", DataFrame(ID = [],trend = [], deviation = [], forecast = []))
 T = 52
-H = 52
 μ = 10
-"""Uncorrelated"""
+n = 50
+ϱs = [2, 4]
+ID = 0
+"""Constant trends"""
 
-for i in 1:50
-    push!(test_forecasts, rand(Uniform(0,2μ),T))
+for ϱ in ϱs
+    δ = Uniform(-ϱ, ϱ)
+    for i in 1:50
+        global ID += 1
+        fc = [μ + rand(δ) for i in 1:T]
+        CSV.write("data/instances.csv", DataFrame(ID = ID, trend = "Constant", varrho = ϱ, forecast = [fc]), append = true)
+    end
 end
 
-"""Seasonal"""
+"""Seasonal trends"""
 
-ρs = [0.1, 0.3]
 fs = [1, 2]
-for ρ in ρs
+for ϱ in ϱs
+    δ = Uniform(-ϱ, ϱ)
     for f in fs
         for i in 1:50
-            spread = ρ*sqrt(12)*μ/2
-            μt = [(1 + 0.5*sin(2f*t*π/H))*max(0, rand(Uniform(μ-spread, μ + spread))) for t in 1:T]
-            push!(test_forecasts, μt)
+            global ID += 1
+            fc = [(1 + 0.5*sin(2f*t*π/T))*μ + rand(δ) for t in 1:T]
+            CSV.write("data/instances.csv", DataFrame(ID = ID, trend = "Seasonnal$f", varrho = ϱ, forecast = [fc]), append = true)
         end
     end
 end
 
-"""Trend"""
+"""Growth trends"""
 
-ρ = [0.1, 0.3]
-for ρ in ρs
+for ϱ in ϱs
+    δ = Uniform(-ϱ, ϱ)
     for i in 1:50
-        spread = ρ*sqrt(12)*μ/4
-        μt = [(1+2t/H)*max(0, rand(Uniform(μ/2-spread, μ/2 + spread))) for t in 1:T]
-        push!(test_forecasts, μt)
-        μt = [(3-2t/H)*max(0, rand(Uniform(μ/2-spread, μ/2 + spread))) for t in 1:T]
-        push!(test_forecasts, μt)
+        global ID += 1
+        fc = [(0.5+t/T)*μ + rand(δ) for t in 1:T]
+        CSV.write("data/instances.csv", DataFrame(ID = ID, trend = "Growth", varrho = ϱ, forecast = [fc]), append = true)
     end
 end
 
-CSV.write("instances.csv", DataFrame(hcat(test_forecasts...)'), writeheader = false)
+"""Decline trends"""
+
+for ϱ in ϱs
+    δ = Uniform(-ϱ, ϱ)
+    for i in 1:50
+        global ID += 1
+        fc = [(1.5-t/T)*μ + rand(δ) for t in 1:T]
+        CSV.write("data/instances.csv", DataFrame(ID = ID, trend = "Decline", varrho = ϱ, forecast = [fc]), append = true)
+    end
+end
