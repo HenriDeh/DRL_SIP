@@ -96,7 +96,7 @@ function (ab::Agent_Bag)(state)
 	actions = [agent(state)|>cpu for agent in ab.agents]
 	actions_b = hcat(actions...)
 	SA = vcat(repeat(state, outer = [1,N]), actions_b) |> gpu
-	values = vcat((agent.critic(SA) for agent in ab.agents)...)
-	means = reshape(mean(values,dims = 1) |> cpu, :, N)
+	values = vcat((agent.critic(SA) for agent in ab.agents)...) |> cpu
+	means = reshape(median(values,dims = 1), :, N)
 	return vcat(actions...)'[argmax(means, dims = 2)]' |> gpu
 end
