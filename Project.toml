@@ -5,6 +5,7 @@ authors = ["H. Dehaybe", "P. Chevalier", "D. Catanzaro"]
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 Blink = "ad839575-38b3-5650-b840-f874b8c74a25"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CUDAdrv = "c5f51814-7f29-56b8-a69c-e4d8f6be1fde"
 CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"

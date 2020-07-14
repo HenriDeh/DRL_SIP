@@ -1,4 +1,4 @@
-using ProgressMeter, LinearAlgebra, Flux, Distributions, CuArrays, Parameters
+using ProgressMeter, LinearAlgebra, Flux, Distributions, CUDA, Parameters
 CuArrays.allowscalar(false)
 
 include("ReplayBuffer.jl")
