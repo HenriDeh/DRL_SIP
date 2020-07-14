@@ -58,6 +58,7 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
     fillbuffer!(replaybuffer, agent, envi)
     returns = Float64[]
 	nsteps = Vector{Transition{T}}()
+	period = 1
 	progress = Progress(maxit)
 	for it = 1:maxit
         s,a,r,ns,d = ksample(replaybuffer)
@@ -79,7 +80,7 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
         )
 		softsync!(agent.actor, target_agent.actor, softsync_rate)
 		push!(nsteps, transition!(agent, envi))
-		if period >= n
+		if period >= nstep
 			r = zero(T)
 			for t in nsteps
 				r += t.r
