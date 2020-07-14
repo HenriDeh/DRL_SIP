@@ -29,7 +29,7 @@ function transition!(agent, envi)
     action = agent.explorer(agent(state) |> cpu)
     reward = envi(action)
     next_state = observe(envi)
-    Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
+    Transition(state, action, reward, next_state, isdone(envi) ? zero(T) : one(T))
 end
 
 function transition_exp!(agent, envi)
@@ -37,7 +37,7 @@ function transition_exp!(agent, envi)
     action = agent.explorer.explore(agent(state) |> cpu)
     reward = envi(action)
     next_state = observe(envi)
-    Transition(state, action, reward, next_state, isdone(envi) ? 0 : 1)
+    Transition(state, action, reward, next_state, isdone(envi) ? zero(T) : one(T))
 end
 
 function test_agent(agent, envi, n = 10000)

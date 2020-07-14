@@ -44,17 +44,20 @@ end
 	softsync_rate::Float64 = 0.001
 	optimiser_critic = ADAM(1f-4)
 	optimiser_actor = ADAM(1.66f-5)
+	nstep = 1
 end
 
 function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false)
     starttime = Base.time()
-    @unpack replaysize, batchsize, softsync_rate, optimiser_actor, optimiser_critic = hyperparameters
+    @unpack replaysize, batchsize, softsync_rate, optimiser_actor, optimiser_critic, nstep = hyperparameters
 	target_agent = deepcopy(agent)
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
-    replaybuffer = ReplayBuffer(replaysize, batchsize, Transition{eltype(observe(envi))})
+	T = eltype(observe(envi))
+    replaybuffer = ReplayBuffer(replaysize, batchsize, Transition{T})
     fillbuffer!(replaybuffer, agent, envi)
     returns = Float64[]
+	nsteps = Vector{Transition{T}}()
 	progress = Progress(maxit)
 	for it = 1:maxit
         s,a,r,ns,d = ksample(replaybuffer)
@@ -75,8 +78,28 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
             optimiser_actor
         )
 		softsync!(agent.actor, target_agent.actor, softsync_rate)
-        addTransition!(replaybuffer, transition!(agent, envi))
-        isdone(envi) && reset!(envi)
+		push!(nsteps, transition!(agent, envi))
+		if period >= n
+			r = zero(T)
+			for t in nsteps
+				r += t.r
+			end
+			addTransition!(replaybuffer, Transition(first(nsteps).s, first(nsteps).a, r, last(nsteps).ns, isdone(envi) ? zero(T) : one(T)))
+			popfirst!(nsteps)
+		end
+        if isdone(envi)
+			while !isempty(nsteps)
+				r = zero(T)
+				for t in nsteps
+					r += t.r
+				end
+				addTransition!(replaybuffer, Transition(first(nsteps).s, first(nsteps).a, r, last(nsteps).ns, zero(T)))
+				popfirst!(nsteps)
+			end
+			period = 0
+			reset!(envi)
+		end
+		period += 1
         if it % test_freq == 0
             push!(returns, test_agent(agent, test_envi, 1000))
             verbose && print(Int(round(returns[end])), " ")
