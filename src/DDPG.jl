@@ -1,5 +1,5 @@
 using ProgressMeter, LinearAlgebra, Flux, Distributions, CUDA, Parameters
-CuArrays.allowscalar(false)
+CUDA.allowscalar(false)
 
 include("ReplayBuffer.jl")
 include("DRL_utilities.jl")
