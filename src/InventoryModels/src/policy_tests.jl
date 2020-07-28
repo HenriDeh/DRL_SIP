@@ -9,8 +9,8 @@ function Instance(envi::InventoryProblem)
     product = envi.BOM[2]
     @assert product isa ProductInventory
     market = envi.market
-    h = market.hold_stockout_cost.h
-    b = market.hold_stockout_cost.b
+    h = product.holding_cost.h
+    b = market.stockout_cost.b
     K  = sup.order_cost.K
     c = sup.order_cost.c
     LT = sup.lead_time
@@ -32,7 +32,7 @@ function test_Scarf_policy(envi::InventoryProblem, S, s, n = 10000)
         reward = zero(eltype(envi))
         t = 1
         while !isdone(envi)
-            y = observe(envi.BOM[2])
+            y = observe(envi.BOM[2]) + sum(observe(envi.BOM[1]))
             q = y < s[t] ? S[t] - y : zero(eltype(envi))
             reward += envi(q)
             t += 1

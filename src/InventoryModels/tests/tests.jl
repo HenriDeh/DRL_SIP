@@ -13,7 +13,9 @@ using InventoryModels
 	@test observe(sup) == [10]
 	test_reset!(sup)
 	@test sup(-10) == 0
-	sup = Supplier(fixed_linear_cost(100,1), fill(Uniform(0,10),2))
+	sup = Supplier(fixed_linear_cost(100,1), zeros(2))
+	@test sup.lead_time == 2 == length(sup.orders) == length(sup.reset_orders) == length(sup.test_reset_orders)
+	@test observe(sup) == [0,0]
 	sup = Supplier(fixed_linear_cost(100,1), fill(Uniform(0,10),2), test_reset_orders=fill(2,2))
 	@test sup.lead_time == 2 == length(sup.orders) == length(sup.reset_orders) == length(sup.test_reset_orders)
 	test_reset!(sup)
@@ -26,43 +28,44 @@ end
 
 @testset "Inventory" begin
 	sup = Supplier(fixed_linear_cost(100,1), fill(2,2))
-	inv = Inventory(linear_cost(4), sup, 3, 0, test_reset_level =0)
-	@test observe(inv) == 3
+	inven = Inventory(linear_cost(4), sup, 3, 0, test_reset_level =0)
+	@test observe(inven) == 3
 	@test sup(10) == 110
-	@test inv(0) == 5*4 + 12*4
+	@test inven(0) == 5*4 + 12*4
 	sup = Supplier(fixed_linear_cost(100,1), fill(2,2))
-	inv = Inventory(linear_cost(4), sup, Uniform(0,20), 0, test_reset_level =3)
-	test_reset!(inv)
-	@test observe(inv) == 3
+	inven = Inventory(linear_cost(4), sup, Uniform(0,20), 0, test_reset_level =3)
+	test_reset!(inven)
+	@test observe(inven) == 3
 	@test sup(10) == 110
-	@test inv(0) == 5*4 + 12*4
+	@test inven(0) == 5*4 + 12*4
 end
 
 @testset "ProductInventory" begin
 	sup = Supplier(fixed_linear_cost(100,0))
-	inv = ProductInventory(linear_cost(1), sup, 0.0)
-	@test observe(inv) == 0
+	inven = ProductInventory(linear_holding_cost(1), sup, 0.0)
+	@test observe(inven) == 0
 	@test sup(10) == 100
-	@test inv(0) == 0
-	inv = ProductInventory(linear_cost(1), sup, Uniform(-10,20), test_reset_level = 0.0)
-	@test observe(inv) != 0
-	test_reset!(inv)
-	@test observe(inv) == 0
+	@test inven(0) == 10
+	inven = ProductInventory(linear_holding_cost(1), sup, Uniform(-10,20), test_reset_level = 0.0)
+	@test observe(inven) != 0
+	test_reset!(inven)
+	@test observe(inven) == 0
 	@test sup(10) == 100
-	@test inv(0) == 0
-	reset!(inv)
-	@test observe(inv) != 0
+	@test inven(10) == 0
+	@test inven.holding_cost(inven.level) == 0
+	reset!(inven)
+	@test observe(inven) != 0
 end
 
 @testset "Martket" begin
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(expected_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv= 0.25
-	ma = Market(expected_hold_stockout_Normal(1,10), pro, Normal, true, Normal.(forecasts, cv.*forecasts), expected_reward = true)
+	ma = Market(expected_stockout_cost(10), pro, Normal, true, Normal.(forecasts, cv.*forecasts), expected_reward = true)
 	@test observe(ma) == [20,5,40,10,60,15,40,10]
 	@test observation_size(ma) == length(observe(ma))
-	ma = Market(expected_hold_stockout_CVNormal(1,10,cv), pro, CVNormal, true, CVNormal.(forecasts, cv))
+	ma = Market(expected_stockout_cost(10), pro, CVNormal, true, CVNormal.(forecasts, cv))
 	@test observe(ma) == [20,40,60,40]
 	@test observation_size(ma) == length(observe(ma))
 	reset!(ma)
@@ -78,38 +81,38 @@ end
 	test_reset!(ma)
 	@test observe(ma) == [20,40,60,40]
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(expected_hold_stockout_CVNormal(1,10,cv ), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
+	ma = Market(expected_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
 	test_reset!(ma)
 	@test observe(ma) == [20,40,60,40]
 	reset!(ma)
 	@test observe(ma) != [20,40,60,40]
 
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(expected_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(expected_hold_stockout_CVNormal(1,10, cv), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
+	ma = Market(expected_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv), expected_reward = true)
 	test_reset!(ma)
 	sup(10)
-	@test ma() ≈ 100.46663620521514 ≈ expected_hold_stockout_CVNormal(1,10, 0.25)(10,20)
+	@test ma() ≈ 100.46663620521514 ≈ expected_stockout_cost(10)(10, Normal(20,5)) + expected_holding_cost(1)(10, Normal(20,5))
 
 	sup = Supplier(fixed_linear_cost(100,0), zeros(1))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(expected_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(expected_hold_stockout_CVNormal(1,10, cv), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
+	ma = Market(expected_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
 	test_reset!(ma)
 	sup(10)
-	@test ma() ≈ expected_hold_stockout_CVNormal(1,10, 0.25)(0,20) + 10
+	@test ma() ≈ expected_stockout_cost(10)(0, Normal(20,5)) + expected_holding_cost(1)(0, Normal(20,5))
 
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(linear_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.0
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv), expected_reward = false)
+	ma = Market(linear_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv), expected_reward = false)
 	test_reset!(ma)
 	sup(10)
 	@test ma() == 100
@@ -117,11 +120,11 @@ end
 	@test ma() == 10
 
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(linear_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.0
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, false, reseter, test_reset_forecasts = CVNormal.(forecasts, cv), expected_reward = false)
+	ma = Market(linear_stockout_cost(10), pro, CVNormal, false, reseter, test_reset_forecasts = CVNormal.(forecasts, cv), expected_reward = false)
 	test_reset!(ma)
 	sup(10)
 	@test ma() == 100
@@ -131,11 +134,11 @@ end
 
 @testset "InventoryProblem" begin
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(expected_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(expected_hold_stockout_CVNormal(1,10, cv), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
+	ma = Market(expected_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = true)
 	envi = InventoryProblem([sup, pro, ma])
 	test_reset!(envi)
 	@test observe(envi) == [0,20,40,60,40]
@@ -153,11 +156,11 @@ end
 
 @testset "Scarf" begin
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(linear_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
+	ma = Market(linear_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
 	envi = InventoryProblem([sup, pro, ma])
 	test_reset!(envi)
 	instance = Instance(envi)
@@ -167,11 +170,11 @@ end
 	@test -363 < test_Scarf_policy(envi, instance.S, instance.s) < -362
 
 	sup = Supplier(fixed_linear_cost(100,0), zeros(1))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(linear_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
+	ma = Market(linear_stockout_cost(10), pro, CVNormal, true, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
 	envi = InventoryProblem([sup, pro, ma])
 	test_reset!(envi)
 	instance = Instance(envi)
@@ -180,11 +183,11 @@ end
 	@test instance.S == [172, 159, 124, -Inf]
 
 	sup = Supplier(fixed_linear_cost(100,0))
-	pro = ProductInventory(linear_cost(1), sup, 0.0)
+	pro = ProductInventory(linear_holding_cost(1), sup, 0.0)
 	forecasts = [20,40,60,40]
 	cv = 0.25
 	reseter = repeat([(Uniform(0,20), Normal(cv,0))],4)
-	ma = Market(linear_holding_backorder(1,10), pro, CVNormal, false, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
+	ma = Market(linear_stockout_cost(10), pro, CVNormal, false, reseter, test_reset_forecasts = CVNormal.(forecasts, cv),expected_reward = false)
 	envi = InventoryProblem([sup, pro, ma])
 	test_reset!(envi)
 	instance = Instance(envi)

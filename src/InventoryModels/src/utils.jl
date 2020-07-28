@@ -19,12 +19,15 @@ Distributions.params(d::CVNormal) = mean(d)
 
 Base.show(n::CVNormal) = print(typeof(n),"(",params(n.normal),")")
 
-struct linear_holding_backorder{T1,T2}
-    h::T1
-    b::T2
+struct linear_holding_cost{T}
+    h::T
 end
-(f::linear_holding_backorder)(y, par...) = f.h*max(zero(y), y) - f.b*min(zero(y), y)
+(f::linear_holding_cost)(y) = f.h*max(zero(y), y)
 
+struct linear_stockout_cost{T}
+    b::T
+end
+(f::linear_stockout_cost)(y) = - f.b*min(zero(y), y)
 
 struct fixed_linear_cost{T1,T2}
     K::T1
@@ -34,57 +37,47 @@ end
 
 linear_cost(c) = fixed_linear_cost(zero(c), c)
 
-struct expected_hold_stockout_Normal{T1,T2}
-    h::T1
-    b::T2
+struct expected_holding_cost{T}
+    h::T
 end
 
-function (f::expected_hold_stockout_Normal)(y, μ, σ)
-    σ == 0 && return linear_holding_backorder(f.h,f.b)(y-μ)
+function (f::expected_holding_cost)(y, demand_dist::Union{CVNormal,Normal})
+    μ = mean(demand_dist)
+    σ = std(demand_dist)
+    σ == 0 && return linear_holding_cost(f.h)(y-μ)
     h = f.h
-    b = f.b
     v = σ^2
     e = MathConstants.e
     π = MathConstants.pi
     fh = zero(y)
-    fb = zero(y)
     if y >= 0
         fh = (((e^(-((y - μ)^2)/2v) -e^(-(μ^2)/2v))*sqrt(v))/(sqrt(2π))) + 1//2*(y-μ)*(erf((y-μ)/(sqrt(2)*sqrt(v))) + erf(μ/(sqrt(2)*sqrt(v))))
         fh *= h
-        fb = ((e^(-((y - μ)^2)/2v))*v + sqrt(π/2) * (μ - y) * sqrt(v) * erfc((y-μ)/(sqrt(2)*sqrt(v))))/(sqrt(2π)*sqrt(v))
-        fb *= b
-    else
-        fb = (e^(-(μ^2)/2v)*v + sqrt(π/2) * (μ - y) * sqrt(v) * (1 + erf(μ/(sqrt(2)*sqrt(v)))))/(sqrt(2π)*sqrt(v))
-        fb *= b
     end
-    return fh + fb
+    return fh
 end
 
-struct expected_hold_stockout_CVNormal{T1,T2,T3}
-    h::T1
-    b::T2
-    CV::T3
+struct expected_stockout_cost{T}
+    b::T
 end
 
-function (f::expected_hold_stockout_CVNormal)(y, μ)
-    f.CV == 0 && return linear_holding_backorder(f.h,f.b)(y-μ)
-    h = f.h
+function (f::expected_stockout_cost)(y, demand_dist::Union{CVNormal,Normal})
+    μ = mean(demand_dist)
+    σ = std(demand_dist)
+    σ == 0 && return linear_stockout_cost(f.h)(y-μ)
     b = f.b
-    v = (f.CV*μ)^2
+    v = σ^2
     e = MathConstants.e
     π = MathConstants.pi
-    fh = zero(y)
     fb = zero(y)
     if y >= 0
-        fh = (((e^(-((y - μ)^2)/2v) -e^(-(μ^2)/2v))*sqrt(v))/(sqrt(2π))) + 1//2*(y-μ)*(erf((y-μ)/(sqrt(2)*sqrt(v))) + erf(μ/(sqrt(2)*sqrt(v))))
-        fh *= h
         fb = ((e^(-((y - μ)^2)/2v))*v + sqrt(π/2) * (μ - y) * sqrt(v) * erfc((y-μ)/(sqrt(2)*sqrt(v))))/(sqrt(2π)*sqrt(v))
         fb *= b
     else
         fb = (e^(-(μ^2)/2v)*v + sqrt(π/2) * (μ - y) * sqrt(v) * (1 + erf(μ/(sqrt(2)*sqrt(v)))))/(sqrt(2π)*sqrt(v))
         fb *= b
     end
-    return fh + fb
+    return fb
 end
 
 function Base.sum(q::Queue) where T

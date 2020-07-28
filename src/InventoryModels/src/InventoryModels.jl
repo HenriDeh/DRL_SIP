@@ -9,7 +9,7 @@ import Distributions.params
 @reexport using .Scarf
 export BOMElement, ActionableElement, Inventory, Supplier, ProductInventory, Market, InventoryProblem
 export observation_size, action_size, observe, reset!, test_reset!, isdone, action_squashing_function, test_Scarf_policy
-export fixed_linear_cost, linear_cost, expected_hold_stockout_Normal, expected_hold_stockout_CVNormal, linear_holding_backorder, CVNormal
+export fixed_linear_cost, linear_cost, linear_holding_cost, linear_stockout_cost, expected_holding_cost, expected_stockout_cost, CVNormal
 """
 A custom distributions useful for the initial states. It is simply a wrapper into a single Multivariate Distribution to be used instead of calling rand(<:Distribution, ::Int).
 """
@@ -108,8 +108,7 @@ end
 function (inv::ProductInventory)(q)
     @assert q >= 0
     inv.level += popfirst!(inv.source.orders) - q
-    order_position = sum(inv.source.orders)
-    return inv.holding_cost(order_position)
+    return inv.level
 end
 
 """Supplier"""
@@ -209,7 +208,7 @@ end
 """Market"""
 
 mutable struct Market{T<:Real, D <: UnivariateDistribution, F, P<:ProductInventory{T}, R, TR} <: BOMElement{T}
-    hold_stockout_cost::F
+    stockout_cost::F
     product::P
     demand_forecasts::Vector{D}
     backlog::Bool
@@ -220,7 +219,7 @@ mutable struct Market{T<:Real, D <: UnivariateDistribution, F, P<:ProductInvento
     expected_reward::Bool
 end
 
-function Market(hold_stockout_cost,
+function Market(stockout_cost,
                 product,
                 err_dist,
                 backlog::Bool,
@@ -229,9 +228,9 @@ function Market(hold_stockout_cost,
                 expected_reward = false,
                 visibility = length(reset_forecasts))
     @assert 0 <= visibility <= length(reset_forecasts)
-    @assert !isempty(methods(hold_stockout_cost)) "hold_stockout_cost must be callable"
+    @assert !isempty(methods(stockout_cost)) "stockout_cost must be callable"
     demand_forecast = eltype(reset_forecasts) <: err_dist ? reset_forecasts : [err_dist(rand.(tup)...) for tup in reset_forecasts]
-    Market(hold_stockout_cost, product, demand_forecast, backlog, visibility, 1, reset_forecasts, test_reset_forecasts, expected_reward)
+    Market(stockout_cost, product, demand_forecast, backlog, visibility, 1, reset_forecasts, test_reset_forecasts, expected_reward)
 end
 
 function observe(m::Market{T}) where T
@@ -264,14 +263,20 @@ end
 
 function (m::Market{T})() where T
     demand = max(zero(T), rand(m.demand_forecasts[m.t]))
-    on_order_cost = m.product(demand)
-    y = m.product.level + (m.expected_reward ? demand : zero(T))
-    cost = on_order_cost + m.hold_stockout_cost(y, params(m.demand_forecasts[m.t])...)
+    if m.expected_reward
+        holding_cost = m.product.holding_cost(m.product.level+m.product.source.orders[1] , m.demand_forecasts[m.t])
+        stockout_cost = m.stockout_cost(m.product.level+m.product.source.orders[1], m.demand_forecasts[m.t])
+        m.product(demand)
+    else
+        m.product(demand)
+        holding_cost = m.product.holding_cost(m.product.level)
+        stockout_cost = m.stockout_cost(m.product.level)
+    end
     m.t += 1
     if !m.backlog && m.product.level < 0
         m.product.level = zero(T)
     end
-    return cost
+    return holding_cost + stockout_cost
 end
 
 
