@@ -81,7 +81,7 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
             push!(returns, test_agent(agent, test_envi, 1000))
             verbose && print(Int(round(returns[end])), " ")
         end
-		progress_bar && next!(progress)
+		progress_bar && next!(progress, showvalues = [(:it, it), (:returns, returns)])
     end
     runtime = (Base.time() - starttime)/60
     return returns, runtime
