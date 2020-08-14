@@ -114,12 +114,13 @@ function expected_future_cost(instance::Instance, y, t::Int, pwla::Pwla)
 end
 
 function backward_SDP(instance::Instance{T}, stepsize::T = one(T)) where T <: Real
+    H = instance.H
+    λ = instance.lead_time
     meandemand = max(stepsize, mean(mean.(instance.demand_forecasts)))
     critical_ratio = 1# (instance.backorder_cost-instance.holding_cost)/instance.backorder_cost
     EOQ = sqrt(2*meandemand*instance.setup_cost/(critical_ratio*instance.holding_cost))
-    upperbound = (2)*EOQ + stepsize - 2*EOQ%stepsize
-    H = instance.H
-    λ = instance.lead_time
+    ub = 2*(EOQ+meandemand*λ)
+    upperbound = ub + stepsize - ub%stepsize
     C_tplus1 = Pwla(stepsize)
     for t in H-λ:-1:1
         C_t = Pwla(stepsize)
