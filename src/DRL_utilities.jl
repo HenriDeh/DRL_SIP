@@ -67,3 +67,10 @@ end
 function actor_loss(state::T, agent) where T <: AbstractArray
     return -mean(agent.critic(vcat(state, agent.actor(state))))
 end
+
+struct EpsilonGreedy{T,F}
+	explore::F
+	ϵ::T
+end
+
+(eg::EpsilonGreedy)(action) = rand() > eg.ϵ ? action : eg.explore(action)

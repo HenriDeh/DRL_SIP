@@ -31,13 +31,6 @@ function (agent::DDPGQN_Agent)(state)
     a .* best
 end
 
-struct EpsilonGreedy{T,F}
-	explore::F
-	ϵ::T
-end
-
-(eg::EpsilonGreedy)(action) = rand() > eg.ϵ ? action : eg.explore(action)
-
 @with_kw struct DDPG_HP
 	replaysize::Int = 2^16
 	batchsize::Int = 128
@@ -45,6 +38,9 @@ end
 	optimiser_critic = ADAM(1f-4)
 	optimiser_actor = ADAM(1.66f-5)
 end
+
+Flux.gpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> gpu, a.critic |> gpu, a.explorer) 
+Flux.cpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> cpu, a.critic |> cpu, a.explorer)
 
 function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false)
     starttime = Base.time()
@@ -81,7 +77,7 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
             push!(returns, test_agent(agent, test_envi, 1000))
             verbose && print(Int(round(returns[end])), " ")
         end
-		progress_bar && next!(progress, showvalues = [(:it, it), (:returns, returns)])
+		progress_bar && next!(progress, showvalues = [(:it, it), ("Last return", isempty(returns) ? "NA" : last(returns))])
     end
     runtime = (Base.time() - starttime)/60
     return returns, runtime

@@ -420,3 +420,5 @@ $RECYCLE.BIN/
 papers/
 *.bson
 *.csv
+.vscode/launch.json
+.vscode/settings.json
