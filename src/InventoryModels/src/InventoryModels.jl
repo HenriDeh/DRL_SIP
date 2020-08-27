@@ -212,7 +212,7 @@ mutable struct Market{T<:Real, D <: UnivariateDistribution, F, P<:ProductInvento
     product::P
     demand_forecasts::Vector{D}
     backlog::Bool
-    visibility::Int
+    horizon::Int
     t::Int
     reset_forecasts::Vector{R}
     test_reset_forecasts::Vector{TR}
@@ -226,15 +226,15 @@ function Market(stockout_cost,
                 reset_forecasts;
                 test_reset_forecasts = reset_forecasts,
                 expected_reward = false,
-                visibility = length(reset_forecasts))
-    @assert 0 <= visibility <= length(reset_forecasts)
+                horizon = length(reset_forecasts))
+    @assert 0 <= horizon <= length(reset_forecasts)
     @assert !isempty(methods(stockout_cost)) "stockout_cost must be callable"
     demand_forecast = eltype(reset_forecasts) <: err_dist ? reset_forecasts : [err_dist(rand.(tup)...) for tup in reset_forecasts]
-    Market(stockout_cost, product, demand_forecast, backlog, visibility, 1, reset_forecasts, test_reset_forecasts, expected_reward)
+    Market(stockout_cost, product, demand_forecast, backlog, horizon, 1, reset_forecasts, test_reset_forecasts, expected_reward)
 end
 
 function observe(m::Market{T}) where T
-    horizon = min(m.t + m.visibility - 1, lastindex(m.demand_forecasts))
+    horizon = min(m.t + m.horizon - 1, lastindex(m.demand_forecasts))
     state = zeros(T, observation_size(m))
     i = 1
     for dist in @view m.demand_forecasts[m.t:horizon]
@@ -245,7 +245,7 @@ function observe(m::Market{T}) where T
     end
     return state
 end
-observation_size(m::Market) = m.visibility*length(params(first(m.demand_forecasts)))
+observation_size(m::Market) = m.horizon*length(params(first(m.demand_forecasts)))
 
 function reset!(m::Market)
     m.t = 1
@@ -324,7 +324,7 @@ function (ip::InventoryProblem{T})(action) where T
     reward -= ip.market()
 end
 
-isdone(ip::InventoryProblem) = ip.market.t > length(ip.market.demand_forecasts)
+isdone(ip::InventoryProblem) = ip.market.t > ip.market.horizon
 
 action_squashing_function(ip::InventoryProblem) = x -> max(zero(x), x)
 
