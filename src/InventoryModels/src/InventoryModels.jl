@@ -230,6 +230,10 @@ function Market(stockout_cost,
     @assert 0 <= horizon <= length(reset_forecasts)
     @assert !isempty(methods(stockout_cost)) "stockout_cost must be callable"
     demand_forecast = eltype(reset_forecasts) <: err_dist ? reset_forecasts : [err_dist(rand.(tup)...) for tup in reset_forecasts]
+    if !backlog
+        product.level = max(zero(product.level), product.level)
+        product.minimum_level = zero(product.level)
+    end
     Market(stockout_cost, product, demand_forecast, backlog, horizon, 1, reset_forecasts, test_reset_forecasts, expected_reward)
 end
 
