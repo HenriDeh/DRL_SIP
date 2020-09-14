@@ -11,19 +11,6 @@ function softsync!(net::C, target_net::C, β) where C <: Chain
     return nothing
 end
 
-mutable struct ClipNorm{T}
-    thresh::T
-end
-
-function Flux.Optimise.apply!(o::ClipNorm, x, Δ)
-    Δnrm = norm(Δ)
-    if Δnrm > o.thresh
-        rmul!(Δ, o.thresh / Δnrm)
-    end
-    return Δ
-end
-
-
 function transition!(agent, envi)
     state = observe(envi)
     action = agent.explorer(agent(state) |> cpu)
@@ -51,21 +38,6 @@ function test_agent(agent, envi, n = 10000)
         cumreward += sum([envis[i](actions[:,i]) for i in 1:n])
     end
     return cumreward/n
-end
-
-function target(reward::T, next_state::T, done::T, target_agent) where T <: AbstractArray
-    next_action = target_agent(next_state)
-    Qprime = target_agent.critic(vcat(next_state, next_action)) .* done
-    return reward .+ Qprime
-end
-
-function critic_loss(state::T, action::T, y::T, critic) where T <: AbstractArray
-    Q = critic(vcat(state, action))
-    return Flux.mse(Q, y)
-end
-
-function actor_loss(state::T, agent) where T <: AbstractArray
-    return -mean(agent.critic(vcat(state, agent.actor(state))))
 end
 
 struct EpsilonGreedy{T,F}
