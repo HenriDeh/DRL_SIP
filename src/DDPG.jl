@@ -32,12 +32,12 @@ function (agent::DDPGQN_Agent)(state)
 end
 
 @with_kw struct DDPG_HP
-	replaysize::Int = 2^16
-	batchsize::Int = 128
+	replaysize::Int = 2^17
+	batchsize::Int = 64
     softsync_rate::Float64 = 0.001
     discount::Float32 = 0.99f0
 	optimiser_critic = ADAM(1f-4)
-	optimiser_actor = ADAM(1.66f-5)
+	optimiser_actor = ADAM(5f-5)
 end
 
 Flux.gpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> gpu, a.critic |> gpu, a.explorer) 
@@ -78,7 +78,7 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
             push!(returns, test_agent(agent, test_envi, 1000))
             verbose && print(Int(round(returns[end])), " ")
         end
-		progress_bar && next!(progress)#, showvalues = [(:it, it), ("Last return", isempty(returns) ? "NA" : last(returns))])
+		progress_bar && next!(progress, showvalues = [("Last return", isempty(returns) ? "NA" : last(returns))])
     end
     runtime = (Base.time() - starttime)/60
     return returns, runtime
@@ -107,9 +107,9 @@ end
 function (ab::Agent_Bag)(state)
 	N = length(ab.agents)
 	actions = [agent(state)|>cpu for agent in ab.agents]
-	actions_b = hcat(actions...)
+	actions_b = reduce(hcat, actions)
 	SA = vcat(repeat(state, outer = [1,N]), actions_b) |> gpu
-	values = vcat((agent.critic(SA) for agent in ab.agents)...) |> cpu
-	means = reshape(median(values,dims = 1), :, N)
-	return vcat(actions...)'[argmax(means, dims = 2)]' |> gpu
+	values = reduce(hcat, [agent.critic(SA) |> cpu for agent in ab.agents]) 
+	medians = reshape(median(values,dims = 2), :, N)
+	return actions[argmax(medians, dims = 1)] |> gpu
 end
