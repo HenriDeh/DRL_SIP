@@ -10,6 +10,7 @@ import Distributions.params
 export BOMElement, ActionableElement, Inventory, Supplier, ProductInventory, Market, InventoryProblem
 export observation_size, action_size, observe, reset!, test_reset!, isdone, action_squashing_function, test_Scarf_policy
 export fixed_linear_cost, linear_cost, linear_holding_cost, linear_stockout_cost, expected_holding_cost, expected_stockout_cost, CVNormal
+export DynamicEnvi
 """
 A custom distributions useful for the initial states. It is simply a wrapper into a single Multivariate Distribution to be used instead of calling rand(<:Distribution, ::Int).
 """
@@ -335,4 +336,5 @@ action_squashing_function(ip::InventoryProblem) = x -> max(zero(x), x)
 Base.eltype(ip::InventoryProblem{T}) where T = T
 
 include("policy_tests.jl")
+include("DynamicEnvi.jl")
 end #module

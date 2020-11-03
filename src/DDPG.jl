@@ -32,25 +32,29 @@ function (agent::DDPGQN_Agent)(state)
 end
 
 @with_kw struct DDPG_HP
-	replaysize::Int = 2^17
-	batchsize::Int = 64
+	replaysize::Int = 2^15
+	batchsize::Int = 128
     softsync_rate::Float64 = 0.001
     discount::Float32 = 0.99f0
 	optimiser_critic = ADAM(1f-4)
-	optimiser_actor = ADAM(5f-5)
+	optimiser_actor = Flux.Optimiser(Flux.ClipNorm(1f-6), ADAM(1.25f-5))
 end
 
 Flux.gpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> gpu, a.critic |> gpu, a.explorer) 
 Flux.cpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> cpu, a.critic |> cpu, a.explorer)
 
-function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false)
+function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
 	target_agent = deepcopy(agent)
+    
+    
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
+    
     replaybuffer = ReplayBuffer(replaysize, batchsize, Transition{eltype(observe(envi))})
     fillbuffer!(replaybuffer, agent, envi)
+
     returns = Float64[]
 	progress = Progress(maxit)
 	for it = 1:maxit
@@ -73,7 +77,11 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
         )
 		softsync!(agent.actor, target_agent.actor, softsync_rate)
         addTransition!(replaybuffer, transition!(agent, envi))
-        isdone(envi) && reset!(envi)
+        if isdone(envi) 
+            reset!(envi)
+            map(x->x(), dynamic_envis)
+            test_envi = deepcopy(envi)
+        end
         if it % test_freq == 0
             push!(returns, test_agent(agent, test_envi, 1000))
             verbose && print(Int(round(returns[end])), " ")

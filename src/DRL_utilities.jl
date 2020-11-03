@@ -33,7 +33,7 @@ function test_agent(agent, envi, n = 10000)
     cumreward = 0.0
     while !isdone(first(envis))
         observations = observe.(envis)
-        input = hcat(observations...)
+        input = reduce(hcat, observations)
         actions = agent(input) |> cpu
         cumreward += sum([envis[i](actions[:,i]) for i in 1:n])
     end
