@@ -47,7 +47,8 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
 	target_agent = deepcopy(agent)
-    
+    twin = deepcopy(agent.critic)
+    target_twin = deepcopy(twin)
     
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
@@ -59,15 +60,25 @@ function train!(agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test
 	progress = Progress(maxit)
 	for it = 1:maxit
         s,a,r,ns,d = ksample(replaybuffer)
-        y = target(r,ns,d,discount, target_agent)
+        y = target(r,ns,d,discount, target_agent,target_twin)
         b = (s,a,y)
-        Flux.train!(
-            (d...) -> critic_loss(d..., agent.critic),
-            Flux.params(agent.critic),
-            [b],
-            optimiser_critic
-        )
-        softsync!(agent.critic, target_agent.critic, softsync_rate)
+        if it%2 == 1
+            Flux.train!(
+                (d...) -> critic_loss(d..., agent.critic),
+                Flux.params(agent.critic),
+                [b],
+                optimiser_critic
+            )
+            softsync!(agent.critic, target_agent.critic, softsync_rate)
+        else
+            Flux.train!(
+                (d...) -> critic_loss(d..., twin),
+                Flux.params(twin),
+                [b],
+                optimiser_critic
+            )
+            softsync!(twin, target_twin, softsync_rate)
+        end
         s,a,r,ns,d = ksample(replaybuffer)
         Flux.train!(
             s -> actor_loss(s, agent),
@@ -96,6 +107,14 @@ function target(reward::T, next_state::T, done::T, discount::Float32, target_age
     next_action = target_agent(next_state)
     Qprime = target_agent.critic(vcat(next_state, next_action)) #.* done
     return reward .+ Qprime .* discount
+end
+
+function target(reward::T, next_state::T, done::T, discount::Float32, target_agent, twin) where T <: AbstractArray
+    next_action = target_agent(next_state)
+    sa = vcat(next_state, next_action)
+    Qprime = target_agent.critic(sa)
+    Qprimetwin = twin(sa)
+    return reward .+ min.(Qprime, Qprimetwin) .* discount
 end
 
 function critic_loss(state::T, action::T, y::T, critic) where T <: AbstractArray
