@@ -121,3 +121,5 @@ function (ab::Agent_Bag)(state)
 	medians = reshape(median(values,dims = 2), :, N)
 	return actions[argmax(medians, dims = 1)] |> gpu
 end
+
+include("TD3.jl")
