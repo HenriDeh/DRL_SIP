@@ -1,19 +1,53 @@
-@with_kw struct TD3_HP
-	replaysize::Int = 2^15
-	batchsize::Int = 128
-    softsync_rate::Float64 = 0.001
-    discount::Float32 = 0.99f0
-	optimiser_critic = ADAM(1f-4)
-    optimiser_actor = Flux.Optimiser(Flux.ClipNorm(1f-6), ADAM(1.25f-5))
+struct TD3_Agent{A, C, F}
+	actor::A
+    critic::C
+    twin::C
+	explorer::F
 end
 
-function train!(agent, envi, hyperparameters::TD3_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
+function TD3_Agent(actor, critic, explorer)
+    TD3_Agent(actor, critic, deepcopy(critic), explorer)
+end
+
+function (agent::TD3_Agent)(state)
+	s = state |> gpu
+	agent.actor(s)
+end
+
+Flux.gpu(a::TD3_Agent) = TD3_Agent(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
+Flux.cpu(a::TD3_Agent) = TD3_Agent(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
+
+struct TD3QN_Agent{A, C, F}
+	actor::A
+    critic::C
+    twin::C
+	explorer::F
+end
+
+function TD3QN_Agent(actor, critic, explorer)
+    TD3QN_Agent(actor, critic, deepcopy(critic), explorer)
+end
+
+function (agent::TD3QN_Agent)(state)
+	actor = agent.actor
+    critic = agent.critic
+    twin = agent.twin
+    s = state |> gpu
+    a = actor(s)
+    a0 = zeros(size(a)) |> gpu
+    sa = vcat(s, a)
+    sa0 = vcat(s, a0)
+    best = min.(critic(sa), twin(sa)) .> min.(critic(sa0), twin(sa0))
+    a .* best
+end
+
+Flux.gpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
+Flux.cpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
+
+function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
-    @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic, td3 = hyperparameters
+    @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
     target_agent = deepcopy(agent)
-    
-    twin = deepcopy(agent.critic)
-    target_twin = deepcopy(twin)
     
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
@@ -25,7 +59,7 @@ function train!(agent, envi, hyperparameters::TD3_HP; maxit::Int = 500000, test_
 	progress = Progress(maxit)
 	for it = 1:maxit
         s,a,r,ns,d = ksample(replaybuffer)
-        y = target(r,ns,d,discount, target_agent,target_twin)
+        y = target_twin(r,ns,d,discount, target_agent)
         b = (s,a,y)
         if it%2 == 1
             Flux.train!(
@@ -37,12 +71,12 @@ function train!(agent, envi, hyperparameters::TD3_HP; maxit::Int = 500000, test_
             softsync!(agent.critic, target_agent.critic, softsync_rate)
         else
             Flux.train!(
-                (d...) -> critic_loss(d..., twin),
-                Flux.params(twin),
+                (d...) -> critic_loss(d..., agent.twin),
+                Flux.params(agent.twin),
                 [b],
                 optimiser_critic
             )
-            softsync!(twin, target_twin, softsync_rate)
+            softsync!(agent.twin, target_agent.twin, softsync_rate)
         end
         s,a,r,ns,d = ksample(replaybuffer)
         Flux.train!(
@@ -68,10 +102,10 @@ function train!(agent, envi, hyperparameters::TD3_HP; maxit::Int = 500000, test_
     return returns, runtime
 end
 
-function target(reward::T, next_state::T, done::T, discount::Float32, target_agent, twin) where T <: AbstractArray
+function target_twin(reward::T, next_state::T, done::T, discount::Float32, target_agent) where T <: AbstractArray
     next_action = target_agent(next_state)
     sa = vcat(next_state, next_action)
     Qprime = target_agent.critic(sa)
-    Qprimetwin = twin(sa)
+    Qprimetwin = target_agent.twin(sa)
     return reward .+ min.(Qprime, Qprimetwin) .* discount
 end
