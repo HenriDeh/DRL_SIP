@@ -21,6 +21,8 @@ end
 function reset!(e::DynamicEnvi)
     e.t = 1
     for k in keys(e.dynamic_parameters)
-        setfield!(e.envi,k,e.dynamic_parameters[k][1])
+        if !isemptye.dynamic_parameters[k]
+            setfield!(e.envi,k,e.dynamic_parameters[k][1])
+        end
     end
 end
