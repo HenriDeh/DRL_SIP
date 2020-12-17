@@ -1,3 +1,5 @@
+using DrWatson
+@quickactivate "DRL_SIP"
 using InventoryModels, CSV, DataFrames, ProgressMeter, BSON, Query
 include(srcdir("DDPG.jl"))
 
@@ -65,14 +67,14 @@ function experiment(;variant::String = "backlog", iterations = 300000, twin::Boo
 		#build learning environment
 		reseter = repeat([(Uniform(0.1μ,1.9μ), Normal(CV,0))], T)
         sup = Supplier(fixed_linear_cost(order_cost,production), fill(Uniform(0, EOQ), leadtime), test_reset_orders = zeros(leadtime))
-		pro = ProductInventory(expected_reward ? expected_holding_cost(holding): linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
+		pro = ProductInventory(expected_reward ? expected_holding_cost(holding) : linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
 		ma = Market(expected_reward ? expected_stockout_cost(stockout) : linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = expected_reward, horizon = H, test_reset_forecasts = repeat([CVNormal(μ, CV)], T))
 		envi = InventoryProblem([sup, pro, ma])
 		kprog = [fixed_linear_cost(round(Int,K), production) for K in LinRange(order_costlow,order_cost,annealing÷H)]
 		supdy = DynamicEnvi(sup, Dict([(:order_cost, kprog)]))	
 		agents = []
 		df_details = DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = [])
-		df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], mean_gap = [], time = [])
+		df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = [], mean_gap = [], time = [])
 		for j in 1:N
 			reset!(supdy)
 			agent_ID = (i-1)*N + j
