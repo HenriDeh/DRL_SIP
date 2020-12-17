@@ -44,6 +44,19 @@ end
 Flux.gpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
 Flux.cpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
 
+
+function Flux.trainmode!(agent::Union{TD3_Agent, TD3QN_Agent})
+    trainmode!(agent.actor)
+    trainmode!(agent.critic)
+    trainmode!(agent.twin) 
+end
+
+function Flux.testmode!(agent::Union{TD3_Agent, TD3QN_Agent})
+    testmode!(agent.actor)
+    testmode!(agent.critic)
+    testmode!(agent.twin)
+end
+
 function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
@@ -51,7 +64,9 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int =
     
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
-    
+
+    testmode!(agent)
+    testmode!(target_agent)
     replaybuffer = ReplayBuffer(replaysize, batchsize, Transition{eltype(observe(envi))})
     fillbuffer!(replaybuffer, agent, envi)
 
@@ -61,6 +76,7 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int =
         s,a,r,ns,d = ksample(replaybuffer)
         y = target_twin(r,ns,d,discount, target_agent)
         b = (s,a,y)
+        trainmode!(agent)
         if it%2 == 1
             Flux.train!(
                 (d...) -> critic_loss(d..., agent.critic),
@@ -78,6 +94,8 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int =
             )
             softsync!(agent.twin, target_agent.twin, softsync_rate)
         end
+        testmode!(agent.critic)
+        testmode!(agent.twin)
         s,a,r,ns,d = ksample(replaybuffer)
         Flux.train!(
             s -> actor_loss(s, agent),
@@ -85,7 +103,8 @@ function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int =
             [s],
             optimiser_actor
         )
-		softsync!(agent.actor, target_agent.actor, softsync_rate)
+        softsync!(agent.actor, target_agent.actor, softsync_rate)
+        testmode!(agent)
         addTransition!(replaybuffer, transition!(agent, envi))
         if isdone(envi) 
             reset!(envi)

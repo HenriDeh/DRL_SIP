@@ -1,6 +1,6 @@
 using ProgressMeter, LinearAlgebra, Flux, Distributions, CUDA, Parameters
 CUDA.allowscalar(false)
-
+using Flux: testmode!, trainmode!
 include("ReplayBuffer.jl")
 include("DRL_utilities.jl")
 
@@ -43,6 +43,16 @@ end
 Flux.gpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> gpu, a.critic |> gpu, a.explorer) 
 Flux.cpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> cpu, a.critic |> cpu, a.explorer)
 
+function Flux.trainmode!(agent::Union{DDPG_Agent,DDPGQN_Agent})
+    trainmode!(agent.actor)
+    trainmode!(agent.critic)
+end
+
+function Flux.testmode!(agent::Union{DDPG_Agent,DDPGQN_Agent})
+    testmode!(agent.actor)
+    testmode!(agent.critic)
+end
+
 function train!(agent::Union{DDPG_Agent, DDPGQN_Agent}, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
@@ -52,15 +62,18 @@ function train!(agent::Union{DDPG_Agent, DDPGQN_Agent}, envi, hyperparameters::D
     test_envi = deepcopy(envi)
     test_reset!(test_envi)
     
+    testmode!(agent)
+    testmode!(target_agent)
     replaybuffer = ReplayBuffer(replaysize, batchsize, Transition{eltype(observe(envi))})
     fillbuffer!(replaybuffer, agent, envi)
 
     returns = Float64[]
 	progress = Progress(maxit)
-	for it = 1:maxit
+    for it = 1:maxit
         s,a,r,ns,d = ksample(replaybuffer)
         y = target(r,ns,d,discount, target_agent)
         b = (s,a,y)
+        trainmode!(agent)
         Flux.train!(
             (d...) -> critic_loss(d..., agent.critic),
             Flux.params(agent.critic),
@@ -75,7 +88,8 @@ function train!(agent::Union{DDPG_Agent, DDPGQN_Agent}, envi, hyperparameters::D
             [s],
             optimiser_actor
         )
-		softsync!(agent.actor, target_agent.actor, softsync_rate)
+        softsync!(agent.actor, target_agent.actor, softsync_rate)
+        testmode!(agent)
         addTransition!(replaybuffer, transition!(agent, envi))
         if isdone(envi) 
             reset!(envi)
