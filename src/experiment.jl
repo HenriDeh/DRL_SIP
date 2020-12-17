@@ -3,7 +3,7 @@ using DrWatson
 using InventoryModels, CSV, DataFrames, ProgressMeter, BSON, Query
 include(srcdir("DDPG.jl"))
 
-function experiment(;variant::String = "backlog", iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true)
+function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true)
 	experimentname = experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward)
     CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []))
     CSV.write("data/exp_raw/main_experiments/$(experimentname)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []))
@@ -42,6 +42,7 @@ function experiment(;variant::String = "backlog", iterations = 300000, twin::Boo
 	for order_cost in order_costs, stockout in stockouts, CV in CVs, leadtime in leadtimes
 		order_costlow = stockout
 		i += 1
+		if i < 10 continue end
 		opt_values = []
 		dataset_ID = dataset |> @filter(_.parameters_ID == i) |> DataFrame!
 		for k in 1:nrow(forecasts)
