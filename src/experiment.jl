@@ -4,12 +4,7 @@ using InventoryModels, CSV, DataFrames, ProgressMeter, BSON, Query
 include(srcdir("DDPG.jl"))
 
 function experiment(;variant::String = "backlog", iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true)
-    @assert variant ∈ ("backlog", "leadtime", "lostsales") "variant must be one of: backlog, leadtime, lostsales"
-    if twin == false && annealing == 0 && hybrid == false && expected_reward == false
-        experimentname = variant*"_vanilla"
-    else
-        experimentname = variant * (hybrid ? "-hybrid" : "-continuous")* (expected_reward ? "-expected" : "-sample")*(annealing == 0 ? "-Kfixed": "-Kannealed") *(twin ? "-twin" : "-notwin")
-    end
+	experimentname = experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward)
     CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []))
     CSV.write("data/exp_raw/main_experiments/$(experimentname)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []))
     CSV.write("data/exp_raw/main_experiments/$(experimentname)_returns.csv", DataFrame(agent_ID = Int[], returns = []))
