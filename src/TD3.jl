@@ -1,4 +1,6 @@
-struct TD3_Agent{A, C, F}
+abstract type AbstractTD3 end
+
+struct TD3_Agent{A, C, F} <: AbstractTD3
 	actor::A
     critic::C
     twin::C
@@ -14,10 +16,7 @@ function (agent::TD3_Agent)(state)
 	agent.actor(s)
 end
 
-Flux.gpu(a::TD3_Agent) = TD3_Agent(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
-Flux.cpu(a::TD3_Agent) = TD3_Agent(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
-
-struct TD3QN_Agent{A, C, F}
+struct TD3QN_Agent{A, C, F} <: AbstractTD3
 	actor::A
     critic::C
     twin::C
@@ -41,23 +40,23 @@ function (agent::TD3QN_Agent)(state)
     a .* best
 end
 
-Flux.gpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
-Flux.cpu(a::TD3QN_Agent) = TD3QN_Agent(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
+Flux.gpu(a::AbstractTD3) = Base.typename(typeof(a)).wrapper(a.actor |> gpu, a.critic |> gpu, a.twin |> gpu, a.explorer) 
+Flux.cpu(a::AbstractTD3) = Base.typename(typeof(a)).wrapper(a.actor |> cpu, a.critic |> cpu, a.twin |> cpu, a.explorer)
 
 
-function Flux.trainmode!(agent::Union{TD3_Agent, TD3QN_Agent})
+function Flux.trainmode!(agent::AbstractTD3)
     trainmode!(agent.actor)
     trainmode!(agent.critic)
     trainmode!(agent.twin) 
 end
 
-function Flux.testmode!(agent::Union{TD3_Agent, TD3QN_Agent})
+function Flux.testmode!(agent::AbstractTD3)
     testmode!(agent.actor)
     testmode!(agent.critic)
     testmode!(agent.twin)
 end
 
-function train!(agent::TD3QN_Agent, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
+function train!(agent::AbstractTD3, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
     target_agent = deepcopy(agent)

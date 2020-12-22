@@ -3,8 +3,9 @@ CUDA.allowscalar(false)
 using Flux: testmode!, trainmode!
 include("ReplayBuffer.jl")
 include("DRL_utilities.jl")
+abstract type AbstractDDPG end
 
-struct DDPG_Agent{A, C, F}
+struct DDPG_Agent{A, C, F} <: AbstractDDPG
 	actor::A
 	critic::C
 	explorer::F
@@ -15,7 +16,7 @@ function (agent::DDPG_Agent)(state)
 	agent.actor(s)
 end
 
-struct DDPGQN_Agent{A, C, F}
+struct DDPGQN_Agent{A, C, F} <: AbstractDDPG
 	actor::A
 	critic::C
 	explorer::F
@@ -40,20 +41,20 @@ end
 	optimiser_actor = Flux.Optimiser(Flux.ClipNorm(1f-6), ADAM(1.25f-5))
 end
 
-Flux.gpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> gpu, a.critic |> gpu, a.explorer) 
-Flux.cpu(a::DDPGQN_Agent) = DDPGQN_Agent(a.actor |> cpu, a.critic |> cpu, a.explorer)
+Flux.gpu(a::AbstractDDPG) = Base.typename(typeof(a)).wrapper(a.actor |> gpu, a.critic |> gpu, a.explorer) 
+Flux.cpu(a::AbstractDDPG) = Base.typename(typeof(a)).wrapper(a.actor |> cpu, a.critic |> cpu, a.explorer)
 
-function Flux.trainmode!(agent::Union{DDPG_Agent,DDPGQN_Agent})
+function Flux.trainmode!(agent::AbstractDDPG)
     trainmode!(agent.actor)
     trainmode!(agent.critic)
 end
 
-function Flux.testmode!(agent::Union{DDPG_Agent,DDPGQN_Agent})
+function Flux.testmode!(agent::AbstractDDPG)
     testmode!(agent.actor)
     testmode!(agent.critic)
 end
 
-function train!(agent::Union{DDPG_Agent, DDPGQN_Agent}, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
+function train!(agent::AbstractDDPG, envi, hyperparameters::DDPG_HP; maxit::Int = 500000, test_freq::Int = maxit, verbose = false, progress_bar = false, dynamic_envis = [])
     starttime = Base.time()
     @unpack replaysize, batchsize, softsync_rate, discount, optimiser_actor, optimiser_critic = hyperparameters
 	target_agent = deepcopy(agent)
