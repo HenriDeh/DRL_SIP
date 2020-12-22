@@ -3,13 +3,14 @@ using DrWatson
 using InventoryModels, CSV, DataFrames, ProgressMeter, BSON, Query
 include(srcdir("DDPG.jl"))
 
-function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true)
+function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true, 
+	N = 20, critic_lr = 1f-4, actor_lr = critic_lr/8, actor_clip = 1f-6, discount = 0.99, softsync_rate = 0.001, batchsize = 128, replaysize = 2^15, width = 64, epsilon = 0.005)
+
 	experimentname = experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward)
     CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []))
     CSV.write("data/exp_raw/main_experiments/$(experimentname)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []))
     CSV.write("data/exp_raw/main_experiments/$(experimentname)_returns.csv", DataFrame(agent_ID = Int[], returns = []))
 
-    N = 20 #number of agents trained per environment parameterization
 	i = 0
 	#environment parameter sets
     holding = 1
@@ -33,16 +34,13 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 	H = 52
 	T = 52*2
 	μ = 10
-	#agent hyperparameters
-	epsilon = 0.005
-	width = 64
+
 	forecasts = CSV.File("data/instances.csv") |> DataFrame!
 	dataset = CSV.File("data/instances_solved.csv") |> @filter(_.Experiment == variant) |> DataFrame!
 	allagents = []
 	for order_cost in order_costs, stockout in stockouts, CV in CVs, leadtime in leadtimes
 		order_costlow = stockout
 		i += 1
-		if i < 10 continue end
 		opt_values = []
 		dataset_ID = dataset |> @filter(_.parameters_ID == i) |> DataFrame!
 		for k in 1:nrow(forecasts)
@@ -77,7 +75,14 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 			println("-----------------------------------")
 			println("Training agent $agent_ID...")
 			#build agent
-            hp = DDPG_HP()
+            hp = DDPG_HP(
+				replaysize = replaysize,
+				batchsize = batchsize,
+				softsync_rate = softsync_rate,
+				discount = discount,
+				optimiser_critic = ADAM(critic_lr),
+				optimiser_actor = Flux.Optimiser(Flux.ClipNorm(actor_clip), ADAM(actor_lr))
+			)
             if twin
                 if hybrid
                     agent_type = TD3QN_Agent
