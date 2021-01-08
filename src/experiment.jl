@@ -2,9 +2,21 @@ using DrWatson
 @quickactivate "DRL_SIP"
 using InventoryModels, CSV, DataFrames, ProgressMeter, BSON, Query
 include(srcdir("DDPG.jl"))
-
+"""
+Use kwargs to define custom environment parameter sets. Example:
+```
+experiment("backlog",
+stockouts = [10],
+CVs = [0.4],
+order_costs = [1280],
+leadtimes = [0])
+```
+will only experiment on one instance. Unspecified environment parameter sets will be defaulted to the respective values of the `variant` argument.
+Only the above four keywords are taken in charge.
+"""
 function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true, 
-	N = 20, critic_lr = 1f-4, actor_lr = critic_lr/8, actor_clip = 1f-6, discount = 0.99, softsync_rate = 0.001, batchsize = 128, replaysize = 2^15, width = 64, epsilon = 0.005)
+	N = 20, critic_lr = 1f-4, actor_lr = critic_lr/8, actor_clip = 1f-6, discount = 0.99, softsync_rate = 0.001, batchsize = 128, replaysize = 2^15, width = 64, epsilon = 0.005,
+	kwargs...)
 
 	experimentname = experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward)
     CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []))
@@ -15,20 +27,20 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 	#environment parameter sets
     holding = 1
     if variant == "backlog"
-        stockouts = [5,10]
-        CVs = [0.2,0.4]
-        order_costs = [80, 360, 1280]
-        leadtimes = [0]
+        stockouts = get(kwargs, :stockouts, [5,10])
+        CVs = get(kwargs, :CVs, [0.2,0.4])
+        order_costs = get(kwargs, :order_costs, [80, 360, 1280])
+        leadtimes = get(kwargs, :leadtimes, [0])
     elseif variant == "leadtime"
-        stockouts = [10]
-        CVs = [0.4]
-        order_costs = [80,360,1280]
-        leadtimes = [0,1,2,4,8]
+        stockouts = get(kwargs, :stockouts, [10])
+        CVs = get(kwargs, :CVs, [0.4])
+        order_costs = get(kwargs, :order_costs, [80,360,1280])
+        leadtimes = get(kwargs, :leadtimes, [0,1,2,4,8])
     elseif variant == "lostsales"
-        stockouts = [10,25,50,100]
-        CVs = [0.4]
-        order_costs = [80,360,1280]
-        leadtimes = [0]
+        stockouts = get(kwargs, :stockouts, [10,25,50,100])
+        CVs = get(kwargs, :CVs, [0.4])
+        order_costs = get(kwargs, :order_costs, [80,360,1280])
+        leadtimes = get(kwargs, :leadtimes, [0])
     end
 	production = 0
 	H = 52
