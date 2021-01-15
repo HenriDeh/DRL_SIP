@@ -16,7 +16,7 @@ of the paper "_A Deep Reinforcement Learning approach to the Stochastic Inventor
 You may encounter difficulties with the installation of `CUDA.jl` artifacts, if so, refer to the [documentation](https://juliagpu.github.io/CUDA.jl/stable/installation/overview/#InstallationOverview). The project can in principle work without GPU acceleration but will be extremely slow. It is unfortunately not compatible with non NVidia Graphics Cards.
 
 ## Reproducing the experiments
-To reproduce all experiments described in the paper, simply include the script with `include("scripts/main_experiments/all_experiments.jl")`. Warning, the experiments are extensive and take weeks to finish. You can reproduce a subset of the experiments by commenting the lines (with `#`) of the experiments you are not interested in. This operation will overwrite the output data files in the `data/main_experiments` folder. 
+To reproduce all experiments described in the paper, simply include the script in Julia with `include("scripts/main_experiments/all_experiments.jl")`. Warning, the experiments are extensive and take weeks to finish. You can reproduce a subset of the experiments by commenting the lines (with `#`) of the experiments you are not interested in. This operation will overwrite the output data files in the `data/main_experiments` folder. 
 
 ## Making custom experiments.
 The `experiment()` function allows for user customization of the environment parameters, algorithm hyperparameters, output paths, and more. Refer to [our documentation]() to make custom experiments on the SL-SIP.
