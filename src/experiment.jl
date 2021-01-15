@@ -12,20 +12,26 @@ order_costs = [1280],
 leadtimes = [0])
 ```
 will only experiment on one instance. Unspecified environment parameter sets will be defaulted to the respective values of the `variant` argument.
-Only the above four keywords are taken in charge.
+The accepted keywords are the four above, `` (set false to append instead of create new csv files), and `experimentname` (user defined name of the output csv files).
+
 """
 function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true, 
 	N = 20, critic_lr = 1f-4, actor_lr = critic_lr/8, actor_clip = 1f-6, discount = 0.99, softsync_rate = 0.001, batchsize = 128, replaysize = 2^15, width = 64, epsilon = 0.005,
-	kwargs...)
+	folder = "main_experiments", overwrite = true, kwargs...)
 
-	experimentname = experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward)
-    CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []))
-    CSV.write("data/exp_raw/main_experiments/$(experimentname)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []))
-    CSV.write("data/exp_raw/main_experiments/$(experimentname)_returns.csv", DataFrame(agent_ID = Int[], returns = []))
+	experimentname = get(kwargs, :experimentname, experiment_name(variant, twin = twin, annealing = annealing, hybrid = hybrid, expected_reward = expected_reward))
+	path = "data/exp_raw/$folder/$(experimentname)"
+	exists = isfile("$(path).csv") && !overwrite
+	exists_det = isfile("$(path)_details.csv") && !overwrite
+	exists_ret = isfile("$(path)_returns.csv") && !overwrite
+	CSV.write("$(path).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []), append = exists)
+    CSV.write("$(path)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []), append = exists_det)
+    CSV.write("$(path)_returns.csv", DataFrame(agent_ID = Int[], returns = []), append = exists_ret)
 
 	i = 0
 	#environment parameter sets
-    holding = 1
+	holding = 1
+	custom_experiment = maximum([:stockouts, :CVs, :order_costs, :leadtimes] .∈ [keys(kwargs)])
     if variant == "backlog"
         stockouts = get(kwargs, :stockouts, [5,10])
         CVs = get(kwargs, :CVs, [0.2,0.4])
@@ -53,34 +59,36 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 	for order_cost in order_costs, stockout in stockouts, CV in CVs, leadtime in leadtimes
 		order_costlow = stockout
 		i += 1
-		opt_values = []
-		dataset_ID = dataset |> @filter(_.parameters_ID == i) |> DataFrame!
-		for k in 1:nrow(forecasts)
-			forecast = eval(Meta.parse(forecasts[k,:].forecast))
-			#build test environment
-			reseter = CVNormal.(forecast, CV)
-			sup = Supplier(fixed_linear_cost(order_cost,production), zeros(leadtime))
-			pro = ProductInventory(linear_holding_cost(holding), sup, Normal(0, 0))
-			ma = Market(linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = false, horizon = H)
-			test_envi = InventoryProblem([sup, pro, ma])
-			#collect optimal policy value
-			opt_policy_value = dataset_ID.opt[k]
-			push!(opt_values, (test_envi, opt_policy_value))
+		if !custom_experiment
+			opt_values = []
+			dataset_ID = dataset |> @filter(_.parameters_ID == i) |> DataFrame!
+			for k in 1:nrow(forecasts)
+				forecast = eval(Meta.parse(forecasts[k,:].forecast))
+				#build test environment
+				reseter = CVNormal.(forecast, CV)
+				sup = Supplier(fixed_linear_cost(order_cost,production), zeros(leadtime))
+				pro = ProductInventory(linear_holding_cost(holding), sup, Normal(0, 0))
+				ma = Market(linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = false, horizon = H)
+				test_envi = InventoryProblem([sup, pro, ma])
+				#collect optimal policy value
+				opt_policy_value = dataset_ID.opt[k]
+				push!(opt_values, (test_envi, opt_policy_value))
+			end
 		end
-		#exploration strategy
-		EOQ = sqrt(μ*2*order_cost/holding)
-		explorer = EpsilonGreedy(action -> [rand() > 0.5 ? 0.0 : rand(Uniform(0, EOQ*2)) for _ in eachindex(action)], epsilon)
-		#build learning environment
-		reseter = repeat([(Uniform(0.1μ,1.9μ), Normal(CV,0))], T)
-        sup = Supplier(fixed_linear_cost(order_cost,production), fill(Uniform(0, EOQ), leadtime), test_reset_orders = zeros(leadtime))
-		pro = ProductInventory(expected_reward ? expected_holding_cost(holding) : linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
-		ma = Market(expected_reward ? expected_stockout_cost(stockout) : linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = expected_reward, horizon = H, test_reset_forecasts = repeat([CVNormal(μ, CV)], T))
-		envi = InventoryProblem([sup, pro, ma])
-		kprog = [fixed_linear_cost(round(Int,K), production) for K in LinRange(order_costlow,order_cost,annealing÷H)]
-		supdy = DynamicEnvi(sup, Dict([(:order_cost, kprog)]))	
-		agents = []
-		df_details = DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = [])
-		df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = [], mean_gap = [], time = [])
+			#exploration strategy
+			EOQ = sqrt(μ*2*order_cost/holding)
+			explorer = EpsilonGreedy(action -> [rand() > 0.5 ? 0.0 : rand(Uniform(0, EOQ*2)) for _ in eachindex(action)], epsilon)
+			#build learning environment
+			reseter = repeat([(Uniform(0.1μ,1.9μ), Normal(CV,0))], T)
+			sup = Supplier(fixed_linear_cost(order_cost,production), fill(Uniform(0, EOQ), leadtime), test_reset_orders = zeros(leadtime))
+			pro = ProductInventory(expected_reward ? expected_holding_cost(holding) : linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
+			ma = Market(expected_reward ? expected_stockout_cost(stockout) : linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = expected_reward, horizon = H, test_reset_forecasts = repeat([CVNormal(μ, CV)], T))
+			envi = InventoryProblem([sup, pro, ma])
+			kprog = [fixed_linear_cost(round(Int,K), production) for K in LinRange(order_costlow,order_cost,annealing÷H)]
+			supdy = DynamicEnvi(sup, Dict([(:order_cost, kprog)]))	
+			agents = []
+			df_details = DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = [])
+			df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = [], mean_gap = [], time = [])
 		for j in 1:N
 			reset!(supdy)
 			agent_ID = (i-1)*N + j
@@ -121,27 +129,31 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 			)
 			#train agent
 			returns, time = train!(agent, envi, hp, maxit =  iterations, progress_bar = true, test_freq = 3000, dynamic_envis = [supdy])
-			CSV.write("data/exp_raw/main_experiments/$(experimentname)_returns.csv", DataFrame(agent_ID = agent_ID, returns = [returns]), append = true)
+			CSV.write("$(path)_returns.csv", DataFrame(agent_ID = agent_ID, returns = [returns]), append = true)
 			#benchmark on instance dataset
-			println("Benchmarking on dataset...")
-			gaps = Float64[]
-			@showprogress for (k,(test_envi, opt_policy_value)) in enumerate(opt_values)
-				agent_value = test_agent(agent, test_envi, 1000)
-				gap = agent_value/opt_policy_value - 1
-				push!(gaps, gap)
-				push!(df_details, [agent_ID, k, gap])
+			if !custom_experiment
+				println("Benchmarking on dataset...")
+				gaps = Float64[]
+				@showprogress for (k,(test_envi, opt_policy_value)) in enumerate(opt_values)
+					agent_value = test_agent(agent, test_envi, 1000)
+					gap = agent_value/opt_policy_value - 1
+					push!(gaps, gap)
+					push!(df_details, [agent_ID, k, gap])
+				end
+				mgap = mean(gaps)
+				push!(df_med, [agent_ID, i, stockout, CV, order_cost, leadtime, mgap, time])
+				println("mean gap = $mgap")
+				println()
 			end
-			mgap = mean(gaps)
-			push!(df_med, [agent_ID, i, stockout, CV, order_cost, leadtime, mgap, time])
-			println("mean gap = $mgap")
-			println()
 			push!(agents, agent)
 			push!(allagents, cpu(agent))
 		end
-		CSV.write("data/exp_raw/main_experiments/$(experimentname).csv", df_med, append = true)
-		CSV.write("data/exp_raw/main_experiments/$(experimentname)_details.csv", df_details, append = true)
+		if !custom_experiment
+			CSV.write("$(path).csv", df_med, append = true)
+			CSV.write("$(path)_details.csv", df_details, append = true)
+		end
 	end
-	BSON.@save "data/pretrained_agents/$(experimentname)_agents_experiment.bson" allagents
+	BSON.@save "data/pretrained_agents/$folder/$(experimentname)_agents_experiment.bson" allagents
 	return nothing
 end
 
