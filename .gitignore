@@ -3,12 +3,10 @@
 ################################################################################
 
 # Folders to ignore - files may be too large, too many, etc. NOTE: EDIT IF NEEDED.
-data
 videos
 plots
 notebooks
 _research
-scripts
 
 ################################################################################
 #                                    Julia                                     #
@@ -418,8 +416,9 @@ $RECYCLE.BIN/
 
 # custom
 papers/
+.vscode/
+_research/
+notebooks/
 *.bson
 *.csv
-.vscode/launch.json
-.vscode/settings.json
 boxplot.jl
