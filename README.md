@@ -29,9 +29,8 @@ The `experiment()` function allows for user customization of the environment par
 		epsilon = 0.005, folder = "main_experiments", overwrite = true, kwargs...)
 ```
 Run the experiments of the specified `variant` with the specified components.  
-
+* `variant = "backlog"` change to "leadtime" or "lostsales" to run the respective experiments. This is an ordinary argument, not a keyword argument. 
 Use the keyword arguments to customize the experiments:
-* `variant = "backlog"` change to "leadtime" or "lostsales" to run the respective experiments.
 * `iterations = 300000` number of training iterations per agent.
 * `twin = true` set to `false` to disable the twin critic.
 * `annealing = 75000` set to `0` to disable the linear annealing of ``K``, set to any value to change the rate of annealing. 
