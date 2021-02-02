@@ -30,6 +30,7 @@ The `experiment()` function allows for user customization of the environment par
 ```
 Run the experiments of the specified `variant` with the specified components.  
 * `variant = "backlog"` change to "leadtime" or "lostsales" to run the respective experiments. This is an ordinary argument, not a keyword argument. 
+
 Use the keyword arguments to customize the experiments:
 * `iterations = 300000` number of training iterations per agent.
 * `twin = true` set to `false` to disable the twin critic.
