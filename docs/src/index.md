@@ -1,12 +1,13 @@
 # DRL_SIP Documentation
 
+```julia
 experiment(variant::String = "backlog"; iterations = 300000, 
 		twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, 
 		expected_reward::Bool = true, N = 20, 
 		critic_lr = 1f-4, actor_lr = critic_lr/8, actor_clip = 1f-6, discount = 0.99, 
 		softsync_rate = 0.001, batchsize = 128, replaysize = 2^15, width = 64, 
 		epsilon = 0.005, folder = "main_experiments", overwrite = true, kwargs...)
-
+```
 Run the experiments of the specified `variant` with the specified components.  
 
 Use the keyword arguments to customize the experiments:
