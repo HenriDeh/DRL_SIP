@@ -194,10 +194,6 @@ Generate an automatic name for the experiment's CSV files. Not called if user de
 """
 function experiment_name(variant::String = "backlog"; iterations = 300000, twin::Bool = true, annealing::Int = 75000, hybrid::Bool = true, expected_reward::Bool = true)
     @assert variant ∈ ("backlog", "leadtime", "lostsales") "variant must be one of: backlog, leadtime, lostsales"
-    if twin == false && annealing == 0 && hybrid == false && expected_reward == false
-        experimentname = variant*"_vanilla"
-    else
-        experimentname = variant * (hybrid ? "-hybrid" : "-continuous")* (expected_reward ? "-expected" : "-sample")*(annealing == 0 ? "-Kfixed" : "-Kannealed") *(twin ? "-twin" : "-notwin")
-    end
+    experimentname = variant * (hybrid ? "-hybrid" : "-continuous")* (expected_reward ? "-expected" : "-sample")*(annealing == 0 ? "-Kfixed" : "-Kannealed") *(twin ? "-twin" : "-notwin")    
     return experimentname
 end

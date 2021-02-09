@@ -1,5 +1,0 @@
-Ablation&Mean Gap&Gap Diff&Gap p-value&Fail prob.&Fail Diff&Fail p-value\\
-Full&0.028&&&0.046&&\\
-Vanilla&0.051&0.023&2.0e-26&0.1&0.058&0.036\\
-No twin&0.035&0.0073&2.2e-6&0.05&0.0042&1.0\\
-No annealing&0.038&0.011&1.0e-12&0.13&0.083&0.0044\\
