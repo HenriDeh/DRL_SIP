@@ -420,5 +420,4 @@ papers/
 _research/
 notebooks/
 *.bson
-*.csv
 boxplot.jl
