@@ -60,7 +60,3 @@ Use the keyword arguments to customize the experiments:
     ```
     will only experiment on one instance. Unspecified environment parameter sets will be defaulted to the respective values of the `variant` argument.
     The accepted keywords are the four above.
-
-
-## More documentation on this project
-Visit our documentation page for detailed explanations about the code in this project.
