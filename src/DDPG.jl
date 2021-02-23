@@ -127,14 +127,25 @@ struct Agent_Bag{A}
 	agents::Vector{A}
 end
 
-function (ab::Agent_Bag)(state)
-	N = length(ab.agents)
-	actions = [agent(state)|>cpu for agent in ab.agents]
-	actions_b = reduce(hcat, actions)
-	SA = vcat(repeat(state, outer = [1,N]), actions_b) |> gpu
-	values = reduce(hcat, [agent.critic(SA) |> cpu for agent in ab.agents]) 
-	medians = reshape(median(values,dims = 2), :, N)
-	return actions[argmax(medians, dims = 1)] |> gpu
+
+function(ab::Agent_Bag)(state::AbstractVector)
+    ab(reshape(state, :, 1))
+end 
+
+
+function (ab::Agent_Bag)(state::AbstractMatrix)
+    state = gpu(state)
+    N = length(ab.agents)
+    actions = [agent(state) for agent in ab.agents]
+    SA = reduce(hcat, [[state; action] for action in actions])
+    vals = [agent.critic(SA) for agent in ab.agents] |> cpu
+    vals = reduce(vcat, vals)
+    medians = median(vals, dims = 1)
+    medians = reshape(medians, :, N)
+    bests = argmax(medians, dims = 2)
+    actions = cpu.(actions)
+    best_actions = [actions[best[2]][:,best[1]] for best in bests]
+    return reduce(hcat, best_actions)|>gpu
 end
 
 include("TD3.jl")

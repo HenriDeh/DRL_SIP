@@ -54,10 +54,11 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 	exists = isfile("$(path).csv") && !overwrite
 	exists_det = isfile("$(path)_details.csv") && !overwrite
 	exists_ret = isfile("$(path)_returns.csv") && !overwrite
+	exists_bag = isfile("$(path)_bag.csv") && !overwrite
 	CSV.write("$(path).csv", DataFrame(agent_ID = [], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = Int[], mean_gap = [], time = []), append = exists)
     CSV.write("$(path)_details.csv", DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = []), append = exists_det)
     CSV.write("$(path)_returns.csv", DataFrame(agent_ID = Int[], returns = []), append = exists_ret)
-
+	CSV.write("$(path)_bag.csv", DataFrame(stockout = Int[], CV = Float64[], order_cost = Int[], leadtime = Int[], gap = Float64[], size = Int[]), append = exists_bag)
 	i = 0
 	#environment parameter sets
 	holding = 1
@@ -105,20 +106,21 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 				push!(opt_values, (test_envi, opt_policy_value))
 			end
 		end
-			#exploration strategy
-			EOQ = sqrt(μ*2*order_cost/holding)
-			explorer = EpsilonGreedy(action -> [rand() > 0.5 ? 0.0 : rand(Uniform(0, EOQ*2)) for _ in eachindex(action)], epsilon)
-			#build learning environment
-			reseter = repeat([(Uniform(0.1μ,1.9μ), Normal(CV,0))], T)
-			sup = Supplier(fixed_linear_cost(order_cost,production), fill(Uniform(0, EOQ), leadtime), test_reset_orders = zeros(leadtime))
-			pro = ProductInventory(expected_reward ? expected_holding_cost(holding) : linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
-			ma = Market(expected_reward ? expected_stockout_cost(stockout) : linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = expected_reward, horizon = H, test_reset_forecasts = repeat([CVNormal(μ, CV)], T))
-			envi = InventoryProblem([sup, pro, ma])
-			kprog = [fixed_linear_cost(round(Int,K), production) for K in LinRange(order_costlow,order_cost,annealing÷H)]
-			supdy = DynamicEnvi(sup, Dict([(:order_cost, kprog)]))	
-			agents = []
-			df_details = DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = [])
-			df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = [], mean_gap = [], time = [])
+		#exploration strategy
+		EOQ = sqrt(μ*2*order_cost/holding)
+		explorer = EpsilonGreedy(action -> [rand() > 0.5 ? 0.0 : rand(Uniform(0, EOQ*2)) for _ in eachindex(action)], epsilon)
+		#build learning environment
+		reseter = repeat([(Uniform(0.1μ,1.9μ), Normal(CV,0))], T)
+		sup = Supplier(fixed_linear_cost(order_cost,production), fill(Uniform(0, EOQ), leadtime), test_reset_orders = zeros(leadtime))
+		pro = ProductInventory(expected_reward ? expected_holding_cost(holding) : linear_holding_cost(holding), sup, Uniform(-μ, 2μ), test_reset_level = 0.0)
+		ma = Market(expected_reward ? expected_stockout_cost(stockout) : linear_stockout_cost(stockout), pro, CVNormal, variant != "lostsales", reseter, expected_reward = expected_reward, horizon = H, test_reset_forecasts = repeat([CVNormal(μ, CV)], T))
+		envi = InventoryProblem([sup, pro, ma])
+		kprog = [fixed_linear_cost(round(Int,K), production) for K in LinRange(order_costlow,order_cost,annealing÷H)]
+		supdy = DynamicEnvi(sup, Dict([(:order_cost, kprog)]))	
+		agents = []
+		df_details = DataFrame(agent_ID = Int[], forecast_ID = Int[], gap = [])
+		df_med = DataFrame(agent_ID = Int[], parameters_ID = Int[], stockout = Int[], CV = [], order_cost = Int[], leadtime = [], mean_gap = [], time = [])
+		
 		for j in 1:N
 			reset!(supdy)
 			agent_ID = (i-1)*N + j
@@ -132,31 +134,31 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 				discount = discount,
 				optimiser_critic = ADAM(critic_lr),
 				optimiser_actor = Flux.Optimiser(Flux.ClipNorm(actor_clip), ADAM(actor_lr))
-			)
-            if twin
-                if hybrid
-                    agent_type = TD3QN_Agent
-                else
-                    agent_type = TD3_Agent
-                end
-            else
-                if hybrid
-                    agent_type = DDPGQN_Agent
-                else
-                    agent_type = DDPG_Agent
-                end
-            end
+				)
+			if twin
+				if hybrid
+					agent_type = TD3QN_Agent
+				else
+					agent_type = TD3_Agent
+				end
+			else
+				if hybrid
+					agent_type = DDPGQN_Agent
+				else
+					agent_type = DDPG_Agent
+				end
+			end
 			agent = agent_type(
-			        Chain(  Dense(observation_size(envi), width, relu),
-			                Dense(width, width, relu),
-			                Dense(width, width, relu),
-			                Dense(width, action_size(envi), relu)) |> gpu,
-			        Chain(  Dense((observation_size(envi) + action_size(envi)), width, relu),
-			                Dense(width, width, relu),
-			                Dense(width, width, relu),
-			                Dense(width, 1)) |> gpu,
-			        explorer
-			)
+				Chain(  Dense(observation_size(envi), width, relu),
+				Dense(width, width, relu),
+				Dense(width, width, relu),
+				Dense(width, action_size(envi), relu)) |> gpu,
+				Chain(  Dense((observation_size(envi) + action_size(envi)), width, relu),
+				Dense(width, width, relu),
+				Dense(width, width, relu),
+				Dense(width, 1)) |> gpu,
+				explorer
+				)
 			#train agent
 			returns, time = train!(agent, envi, hp, maxit =  iterations, progress_bar = true, test_freq = 3000, dynamic_envis = [supdy])
 			CSV.write("$(path)_returns.csv", DataFrame(agent_ID = agent_ID, returns = [returns]), append = true)
@@ -178,9 +180,29 @@ function experiment(variant::String = "backlog"; iterations = 300000, twin::Bool
 			push!(agents, agent)
 			push!(allagents, cpu(agent))
 		end
+		df_bag = DataFrame(stockout = Int[], CV = Float64[], order_cost = Int[], leadtime = Int[], gap = Float64[], size = Int[])
+		for sz in (N, N÷2, N÷4)
+			for k in 1:N÷sz
+				agents = allagents[(1:N) .+ (i-1)*N][(1:sz) .+ (k-1)*sz]
+				bagagent = Agent_Bag(gpu.(agents))
+				println("Benchmarking ensemble $i,$k($sz) on dataset...")
+				gaps = Float64[]
+
+				@showprogress for (k,(test_envi, opt_policy_value)) in enumerate(opt_values)
+					agent_value = test_agent(bagagent, test_envi, 1000)
+					gap = agent_value/opt_policy_value - 1
+					push!(gaps, gap)
+				end
+				mgap = mean(gaps)
+				push!(df_bag, [stockout, CV, order_cost, leadtime, mgap, sz])
+				println("mean gap = $mgap")
+				println()
+			end
+		end
 		if !custom_experiment
 			CSV.write("$(path).csv", df_med, append = true)
 			CSV.write("$(path)_details.csv", df_details, append = true)
+			CSV.write("$(path)_bag.csv", df_bag, append = true)
 		end
 	end
 	BSON.@save "data/pretrained_agents/$folder/$(experimentname)_agents_experiment.bson" allagents
