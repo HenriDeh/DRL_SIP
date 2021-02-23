@@ -16,7 +16,20 @@ of the paper "_A Deep Reinforcement Learning approach to the Stochastic Inventor
 You may encounter difficulties with the installation of `CUDA.jl` artifacts, if so, refer to the [documentation](https://juliagpu.github.io/CUDA.jl/stable/installation/overview/#InstallationOverview). The project can in principle work without GPU acceleration but will be extremely slow. It is unfortunately not compatible with non NVidia Graphics Cards.
 
 ## Reproducing the experiments
-To reproduce all experiments described in the paper, simply include the script in Julia with `include("scripts/main_experiments/all_experiments.jl")`. Warning, the experiments are extensive and take weeks to finish. You can reproduce a subset of the experiments by commenting the lines (with `#`) of the experiments you are not interested in. This operation will overwrite the output data files in the `data/main_experiments` folder. 
+To reproduce all experiments described in the paper, simply include the script in Julia with `include("scripts/main_experiments/all_experiments.jl")`. Warning, the experiments are extensive and take weeks to finish. You can reproduce a subset of the experiments by commenting the lines (with `#`) of the experiments you are not interested in. This operation will overwrite the output data files in the `data/main_experiments` folder.
+
+## Data files
+All data files are available in the data folder. `instances.csv` contains the 500 generated forecasts for the dataset, they were generated with the `script/instances.jl` script. `instances_solved` contain the optimal value of all 500*(12+15+12)*20= 19500 instances solved for this paper. The file was generated with the script `script/main_experiments/scarf_presolving.jl`  
+The output data of the experiments are available in the folder `data/exp_raw/main_experiments/`. The name of each file allows to recognize from which experiment it was generated: `version-h-e-a-t(_returns/details).csv`.
+
+* variant is one of "backlog","leadtime","lostsales";
+* h is "hybrid" if the hybrid component was activated, "continuous" if not;
+* e is "expected" if the reward returned by the environment is the computed expectation, "sample" if it's a randomized reward;
+* a is "Kannealed" if the 75000 iterations annealing was activated, "Kfixed" if not;
+* t is "twin" if the twin critic is used, "no_twin" if not.
+
+Each experiment generates three csv files using the above naming. One has no appendage, it contains the mean gap of each agent over the 500 instances. One is apprended with "\_details", it contains the gap of each agent for each of the 500 instances. One is appended with "\_returns", it contains the gap with respect to the test instance with stationnary demand, computed every 3000 iterations during training.
+
 
 ## Making custom experiments.
 The `experiment()` function allows for user customization of the environment parameters, algorithm hyperparameters, output paths, and more. Here is the documentation of this function.
